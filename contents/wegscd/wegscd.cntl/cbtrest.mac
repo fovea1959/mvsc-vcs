@@ -1,0 +1,14 @@
+//CBT481#1 JOB DOUG,LOAD.CBT481,CLASS=S,MSGCLASS=A,
+//             MSGLEVEL=(1,1)
+//JOBPROC DD DSN=WEGSCD.CBT.PROCLIB,DISP=SHR,SYSPROC=NO
+//ASMFCL  EXEC ASMFCL,V1=CBT481
+//STEP498 EXEC UPDATEO,
+//             V1=CBT481,
+//             LAB=498,
+//             VO=WEGSCD,
+//             INDEX=CBT481
+//STEP758 EXEC UPDATEO,
+//             V1=CBT481,
+//             LAB=758,
+//             VO=WEGSCD,
+//             INDEX=CBT481

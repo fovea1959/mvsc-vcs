@@ -1,0 +1,117 @@
+//MAND#PAS JOB (),'STPASCAL',MSGCLASS=X
+// EXEC STPASCAL
+//COMPILE.INPUT DD *
+program MandelbrotSet(input,output); (* poster insieme di Mandelbrot *)
+const maxColori=20; (* bianco + 20 colori *)
+      maxIter=30; (* numero massimo di iterazioni per ogni punto *)
+type linea8=1..8; (* una linea si compone di 8 linee sovraimpresse *)
+     string8=array[linea8] of char; (* 1 colore = 8 chars sovraimpressi
+var colore:array[0..maxColori] of string8; (* tavolozza colori *)
+    linea:array[0..131] of 0..maxColori; (* una linea di colori *)
+    minRE,minIM,maxRE,maxIM:real; (* angoli rettangolo insieme... *)
+    strp:integer; (* ...diviso in tante striscie *)
+
+   procedure InizializzaColori;
+   begin
+      (* https://doi.org/10.1109/T-C.1970.222883       *)
+      (* IEEE TRANSACTIONS ON COMPUTERS, FEBRAURY 1970 *)
+      (* Pictorial Output with a Line Printer          *)
+      (* I. D. G. MACLEOD                              *)
+      (* la catena QN dovrebbe avere ' e non پ         *)
+      colore[ 0]:='        ';  (* 0.0  *)
+      colore[ 1]:='-       ';  (* 0.15 *)
+      colore[ 2]:='=       ';  (* 0.22 *)
+      colore[ 3]:='+       ';  (* 0.25 *)
+      colore[ 4]:=')       ';  (* 0.29 *)
+      colore[ 5]:='1       ';  (* 0.33 *)
+      colore[ 6]:='Z       ';  (* 0.37 *)
+      colore[ 7]:='X       ';  (* 0.40 *)
+      colore[ 8]:='A       ';  (* 0.42 *)
+      colore[ 9]:='M       ';  (* 0.45 *)
+      colore[10]:='O-      ';  (* 0.53 *)
+      colore[11]:='O=      ';  (* 0.56 *)
+      colore[12]:='O+      ';  (* 0.60 *)
+      colore[13]:='O+''     '; (* 0.64 *)
+      colore[14]:='O+''.    '; (* 0.67 *)
+      colore[15]:='O+''.=   '; (* 0.79 *)
+      colore[16]:='OX''.-   '; (* 0.85 *)
+      colore[17]:='OX''.HC  '; (* 0.89 *)
+      colore[18]:='OX''.HB  '; (* 0.93 *)
+      colore[19]:='OX''.HBV '; (* 0.97 *)
+      colore[20]:='OX''.HBVA'  (* 1.00 *)
+   end;
+
+   (* stampa una linea composta da 8 linee sovraimpresse *)
+   procedure Stampa8Linee;
+   var l:linea8;
+
+      procedure StampaLinea(l:linea8); (* stampa una linea *)
+      var c:0..131; (* una linea = 132 colonne *)
+      begin
+         for c:=0 to 131
+         do write(colore[linea[c],l]:1);
+         writeln
+      end;
+
+   begin
+      write(' '); (* ASA avanza una linea *)
+      StampaLinea(1); (* stampa la prima linea *)
+      for l:=2 to 8
+      do begin
+            write('+'); (* ASA non avanzare linea *)
+            StampaLinea(l); (* sovraimpone le altre 7 linee *)
+         end
+   end;
+
+   procedure Mandelbrot(minRE,minIM,maxRE,maxIM:real; strp:integer);
+   label 99; (* eat your heart out Dijkstra *)
+   var stepC,stepX,stepY,re,im,zr,zi,a,b:real;
+       Xsize,Ysize,x,y,n,s:integer;
+   begin
+      Xsize:=131*strp; (* le colonne vengono contate 0..131 *)
+      Ysize:=48*strp; (* 0..49 righe approssimano il rapporto 3:2 *)
+      strp:=strp-1;
+      stepC:=maxColori/(maxIter-1);
+      stepX:=(maxRE-minRE)/Xsize;
+      stepY:=(maxIM-minIM)/Ysize;
+      for s:=0 to strp (* ciclo principale: quante striscie *)
+      do begin
+            for y:=0 to Ysize (* ciclo righe *)
+            do begin
+                  im:=minIM+stepY*y;
+                  for x:=0 to 131 (* ciclo colonne *)
+                  do begin
+                        re:=minRE+stepX*(132*s+x);
+                        zr:=re;
+                        zi:=im;
+                        for n:=0 to maxIter-1
+                        do begin
+                              a:=zr*zr;
+                              b:=zi*zi;
+                              if(a+b)>4
+                              then goto 99;
+                              zi:=zr*zi*2+im;
+                              zr:=a-b+re
+                           end;
+   99:                   linea[x]:=trunc(n*stepC)
+                     end;
+                  Stampa8Linee
+               end;
+            if s<strp (* finito una striscia, se ne seguono altre... *)
+            then writeln('1') (* ASA avanza una pagina *)
+         end
+   end;
+
+begin
+   readln(minRE,minIM,maxRE,maxIM,strp);
+   InizializzaColori;
+   Mandelbrot(minRE,minIM,maxRE,maxIM,strp)
+end.
+//POSTPROC.OUTPUT DD SYSOUT=*
+//GO.SYSLOUT DD SYSOUT=*
+//GO.FT06F001 DD SYSOUT=*
+//GO.OUTPUT DD SYSOUT=*
+//GO.INPUT DD *
+-2.0000 -1.0000 +1.0000 +1.0000 1
+/*
+//* was -2.0000 -1.0000 +1.0000 +1.0000 5

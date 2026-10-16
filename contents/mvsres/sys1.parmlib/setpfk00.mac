@@ -1,0 +1,33 @@
+* ------------------------------------------------------------------- *
+* PROGRAM FUNCTION KEYS FOR CONSOLE 1                                 *
+* ------------------------------------------------------------------- *
+0101N K E,1
+0102Y V _XXX,ONLINE;M _XXX,VOL=(SL,VVVVVV),USE=PRIVATE
+0103Y V _XXX,OFFLINE;S DEALLOC
+0104Y S CLEARDMP,DD=_
+0105
+0106
+0107
+0108Y D U,,,_120,16
+0109N D U,TAPE,ONLINE
+0110N D U,DASD,ONLINE
+0111Y V NET,INACT,ID=CUU4_0;V NET,ACT,ID=CUU4_0
+0112N K S,DEL=RD,SEG=19,RTME=001,RNUM=19,CON=N;K A,10
+* ------------------------------------------------------------------- *
+* PROGRAM FUNCTION KEYS FOR CONSOLE 2                                 *
+* ------------------------------------------------------------------- *
+0201N K E,1
+0202Y V _XXX,ONLINE;M _XXX,VOL=(SL,VVVVVV),USE=PRIVATE
+0203Y V _XXX,OFFLINE;S DEALLOC
+0204Y S CLEARDMP,DD=_
+0205
+0206
+0207
+0208Y D U,,,_120,16
+0209N D U,TAPE,ONLINE
+0210N D U,DASD,ONLINE
+0211Y V NET,INACT,ID=CUU4_0;V NET,ACT,ID=CUU4_0
+0212N K S,DEL=RD,SEG=19,RTME=001,RNUM=19,CON=N;K A,10
+* ------------------------------------------------------------------- *
+* END OF SETPFK00 MEMBER                                              *
+* ------------------------------------------------------------------- *

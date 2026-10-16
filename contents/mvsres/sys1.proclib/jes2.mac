@@ -1,0 +1,26 @@
+//JES2     PROC M=JES2PM00,            JES2 PROC MEMBER
+//             N1=SYS1,                HLQ #1
+//             N2=SYS2,                HLQ #2
+//             N3=SYSC,                HLQ #3
+//             L=LINKLIB,              JES2 LOAD LIBRARY
+//             U=3350,                 JES2 LOAD LIBRARY UNIT
+//             P=PARMLIB               PARM LIBRARY NAME
+//IEFPROC  EXEC PGM=HASJES20,
+//             TIME=1440,
+//             DPRTY=(15,15)
+//STEPLIB  DD  UNIT=&U,DISP=SHR,DSN=&N1..&L   JES2 LOAD LIBRARY
+//PROC00   DD  DSN=&N1..PROCLIB,DISP=SHR      MAIN SEARCH PRIME
+//         DD  DSN=&N3..PROCLIB,DISP=SHR,     MAIN SEARCH SECONDARY
+//             UNIT=&U,VOL=SER=SYSCPK
+//         DD  DSN=&N2..PROCLIB,DISP=SHR      MAIN SEARCH TERTIARY
+//         DD  DSN=&N1..PROCLIB,DISP=SHR      MAIN SEARCH FALLBACK
+//IEF0PDSI DD  DSN=&N1..PROCLIB,DISP=SHR      <---1ST DYNAM CONVERTER
+//         DD  DSN=&N3..PROCLIB,DISP=SHR,
+//             UNIT=&U,VOL=SER=SYSCPK
+//         DD  DSN=&N2..PROCLIB,DISP=SHR
+//IEF1PDSI DD  DSN=&N1..PROCLIB,DISP=SHR      <---2ND DYNAM CONVERTER
+//         DD  DSN=&N3..PROCLIB,DISP=SHR,
+//             UNIT=&U,VOL=SER=SYSCPK
+//         DD  DSN=&N2..PROCLIB,DISP=SHR
+//HASPPARM DD  DSN=&N1..&P(&M),DISP=SHR       <-- JES2 PARMS
+//HASPLIST DD  DDNAME=IEFRDER

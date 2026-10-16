@@ -1,0 +1,63 @@
+         TITLE ' SVC 244 - Toggle Authorization '
+***********************************************************************
+*                                                                     *
+*  Name: IGC0024D                                                     *
+*                                                                     *
+*  Type: Assembler source                                             *
+*                                                                     *
+*  Desc: Type 3/4 SVC for setting/unsetting JSCBAUTH                  *
+*                                                                     *
+*        If a security system (for example RAKF) is installed         *
+*        read access to ressource SVC244 in class FACILITY is         *
+*        requested and the JSCBAUTH change is made only if the        *
+*        security system grants this access                           *
+*                                                                     *
+*  Regs at Entry:                                                     *
+*                                                                     *
+*          R0 must be 0                                               *
+*          R1 = Request code.  R1 = 1 ===> Authon                     *
+*                                else ===> Authoff                    *
+*          R2       undetermined                                      *
+*          R3  ---> CVT                                               *
+*          R4  ---> TCB                                               *
+*          R5  ---> SVRB                                              *
+*          R6  ---> Entry point                                       *
+*          R7  ---> ASCB                                              *
+*          R8  ---> undetermined                                      *
+*          R9  ---> undetermined                                      *
+*          R10 ---> undetermined                                      *
+*          R11 ---> undetermined                                      *
+*          R12 ---> undetermined                                      *
+*                                                                     *
+***********************************************************************
+IGC0024D CSECT                             , SVC 244
+         REGISTER                          , equates
+         USING *,6                         , use R6 as base register
+         LTR   R0,R0                       , R0 = 0 ?
+         BNZR  R14                         , return if not
+         ICM   R8,B'1111',CVTSAF(R3)       , SAFV defined ?
+         BZ    GOFORIT                     , no RAC, permit JSCB auth
+         USING SAFV,R8                     , addressability of SAFV
+         CLC   SAFVIDEN(4),SAFVID          , SAFV initialized ?
+         BNE   GOFORIT                     , no RAC, permit JSCB auth
+         DROP  R8                          , SAFV no longer needed
+         LR    R8,R1                       , remember R1
+         LR    R9,R15                      , remember R15
+         RACHECK ENTITY=SVC244,CLASS='FACILITY',ATTR=READ ask RAC
+         LR    R1,R8                       , restore R1
+         LR    R8,R15                      , remember return code
+         LR    R15,R9                      , restore R15
+         XR    R0,R0                       , restore R0
+         LTR   R8,R8                       , RAC authorization granted?
+         BNZR  R14                         , return if not
+GOFORIT  L     R11,180(,R4)                , R11 = JSCB (from TCBJSCB)
+         BCT   R1,AUTHOFF                  , R1 NOT = 1 ==> Authoff
+         OI    236(R11),X'01'              , set JSCBAUTH on
+         BR    R14                         , and return
+AUTHOFF  NI    236(11),255-X'01'           , set JSCBAUTH off
+         BR    R14                         , and return
+SVC244   DC    CL39'SVC244'                , facility name to authorize
+SAFVID   DC    CL4'SAFV'                   , SAFV eye catcher
+CVTSAF   EQU   248 CVTSAF doesn't exist but is a reserved field in 3.8J
+         ICHSAFV  DSECT=YES                , map SAFV
+         END                               , of SVC 244

@@ -1,0 +1,1561 @@
+         TITLE ' D I S P L A Y   ( M V S )  '
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'DISPLAY' TSO command processor with alias 'DS'              *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+*        Date updated: November  26,2025.
+*        Attributes: Reentrant, Refreshable
+*
+*        Function:
+*            This TSO command displays information for
+*            systems support such as UCBs, virtual
+*            addresses, LPA directory entries, SVCs,
+*            Enqueues of a task name, and entries in
+*            the BLDL list.
+*            (The BLDL routine depends on a coded offset).
+*
+*            Change log.
+*            28AUG80 - Added device type in DASD volume display.
+*                      Added field W5STYPE.
+*            29OCT80 - Changed BLDL offset to '58' (was 4C).
+*                      Added SVCTABLE location to SVC display.
+*            21SEP81 - Added 'Shared' to DASD display.
+*            18Oct2025 - Added ESTAE to protect against 0C4
+*                        and add 2314, 3375, 3380, 3390 device types.
+*                        Module reworked by Rob Prins.
+         SPACE
+         MACRO
+&NAME    CONV  &IN,&OUT,&LEN
+         LCLC  &L
+&L       SETC  'L'''
+&NAME    LA    R1,&IN
+         AIF   (T'&LEN EQ 'O').DEFLEN
+         LA    R14,&LEN
+         AGO   .OUTLOC
+.DEFLEN  LA    R14,&L&OUT
+.OUTLOC  LA    R15,&OUT
+         BAL   R2,CONVERTB
+         MEND
+         SPACE 2
+         MACRO
+&NAME    ACON  &IN,&OUT,&OFFSET=2
+         AIF   ('&IN'(1,1) EQ '(').XREG
+&NAME    UNPK  WCONDATA,&IN
+         AGO   .XGEN
+.XREG    ANOP
+&NAME    ST    &IN(1),WDOUBLE
+         UNPK  WCONDATA,WDOUBLE(5)
+.XGEN    TR    WCONDATA(8),TRANS1
+         AIF   (T'&OFFSET EQ 'O').XMOVE
+         MVC   &OUT,WCONDATA+&OFFSET
+         MEXIT
+.XMOVE   MVC   &OUT,WCONDATA
+         MEND
+         SPACE 2
+         MACRO
+&NAME    FCON  &IN,&OUT
+&NAME    ACON  &IN,&OUT,OFFSET=
+         MEND
+         SPACE 2
+         MACRO
+&NAME    LINE2
+&NAME    MVC   WLINE2,XBLANKS          Blank header line #2
+         MVC   WLINE2(4),=Y(L'WLINE2,0) MSG HEADER
+         MVI   WLINE2+5,C'-'           Set-up header line
+         MVI   WLINE2+14,C'-'
+         MEND
+         SPACE 2
+         MACRO
+         TRANS &O,&M
+         ORG   TRANS3+&O
+         DC    &M.AL1(*-TRANS3)
+         MEND
+         EJECT
+         MACRO
+&NAME    ZCHK  &R,&L,&B,&BC=Z
+&NAME    L     &R,&L
+         LA    &R,0(&R)
+         LTR   &R,&R
+         B&BC  &B
+         MEND
+         SPACE 2
+         MACRO
+&NAME    PCHK  &R,&L,&B
+&NAME    ZCHK  &R,&L,&B,BC=P
+         MEND
+         SPACE 2
+         MACRO
+&NAME    EDST  &V,&F
+&NAME    L     R0,&V
+         CVD   R0,WDOUBLE
+         MVC   &F,XPAT1
+         ED    &F,WDOUBLE+5
+         MEND
+         SPACE 2
+         MACRO
+&NAME    EDR   &R,&F
+&NAME    CVD   &R,WDOUBLE
+         MVC   &F,XPAT1
+         ED    &F,WDOUBLE+5
+         MEND
+         EJECT
+DISPLAY  CSECT
+         USING DISPLAY,R11,R12         Provide addressability
+         B     32(,R15)                Branch around constants
+         DC    AL1(7),CL7'DISPLAY'
+         DC    CL4' 3.1'
+         DC    CL16' &SYSDATE &SYSTIME '
+         STM   14,12,12(R13)           Save callers registers
+         LR    R11,R15                 Setup base register
+         LA    R14,1
+         LA    R12,4095(R14,R11)
+         LR    R10,R1
+         USING CPPL,R10
+         GETMAIN R,LV=WORKLEN
+         XC    0(256,R1),0(R1)
+         MVC   256(WORKLEN-256,R1),0(R1)
+         ST    R13,4(,R1)              Backward pointer
+         ST    R1,8(,R13)              Forward pointer
+         LR    R13,R1
+         USING WORKAREA,R13
+         STM   R11,R13,ESTAERGS        Save for ESTAE recover
+         SPACE
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Set up IOPL for PUTLINE                                      *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+         LA    R15,WIOPL
+         USING IOPL,R15
+         MVC   IOPLUPT(4),CPPLUPT
+         MVC   IOPLECT(4),CPPLECT
+         LA    R0,WECB
+         ST    R0,IOPLECB
+         XC    WECB,WECB
+         LA    R0,WPTPB
+         ST    R0,IOPLIOPB
+         XC    WPTPB(12),WPTPB
+         DROP  R15                     IOPL
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Set up PPL for PARSE                                         *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+         LA    R15,WPPL
+         USING PPL,R15
+         MVC   PPLUPT(4),CPPLUPT       User profile table
+         MVC   PPLECT(4),CPPLECT       Environment control table
+         LA    R0,WECB
+         ST    R0,PPLECB
+         XC    WECB,WECB
+         L     R0,=A(DISPPCL)
+         ST    R0,PPLPCL
+         LA    R0,WANS
+         ST    R0,PPLANS
+         MVC   PPLCBUF(4),CPPLCBUF
+         XC    PPLUWA(4),PPLUWA
+         DROP  R15                     PPL
+         SPACE 1
+         DROP  R10                     CPPL
+         SPACE
+         MVI   WSW,0                   Clear switch
+         MVI   WLINEB,C' '             Clear ...
+         MVC   WLINED,WLINEB                 ... print line
+         MVC   WFILLER,XBLANKS         Set default filler
+*
+         LA    R0,WDBLKLEN             PUTLINE data block length
+         GETMAIN R,LV=(0)              Get the block
+         ST    R1,WDBLK                Save start address
+         LR    R3,R1                   Also place in work register
+         LA    R4,WDBLKENT             Line length
+         LR    R5,R3                   Data start
+         AL    R5,=A(WDBLKLEN-1)       + (length-1) = end
+         STM   R3,R5,WDBLKA            Save work registers
+         LR    R2,R3                   Data start
+         LA    R3,0(R3,R4)             Second line
+INDBLK   ST    R3,0(R2)                Connect data lines
+         LR    R2,R3                   Current line
+         BXLE  R3,R4,INDBLK            Get next line
+         XC    0(4,R2),0(R2)           Last line
+
+*        GET ADDRESS OF PUTLINE INTO WPUTL
+*
+         L     R15,CVTPTR              CVTPTR
+         USING CVT,R15
+         ICM   R0,15,CVTPUTL           Address of IKJPUTL
+         BZ    LOADPUTL                Not there: load IKJPUTL
+         DROP  R15                     CVT
+         OI    WSW,WSWPUTL             Flag IKJPUTL present
+         B     SAVEPUTL                Branch around LOAD
+LOADPUTL EQU   *
+         LOAD  EPLOC=LPUTL             Load IKJPUTL
+SAVEPUTL ST    R0,WPUTL                Save entry point
+         SPACE 1
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Call the PARSE service routine                               *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE 1
+         XC    WECB,WECB               Clear ECB
+         LA    R1,WPPL                 Point to PPL
+         L     R15,CVTPTR              Address of CVT
+         USING CVT,R15
+         ICM   R15,15,CVTPARS          Entry point IKJPARS
+         BZ    PARSELNK                No: Link IKJPARS
+         DROP  R15                     CVT
+         BALR  R14,R15                 Call IKJPARS
+         B     PARSEEXT                Branch around LINK
+PARSELNK EQU   *
+         LINK  SF=(E,LPARSE),MF=(E,(1))
+PARSEEXT EQU   *
+         SPACE 1
+         LTR   R15,R15                 IKJPARSE ok?
+         BNZ   ERRPARSE                No, error
+         L     R10,WANS                Yes, get result
+         USING IKJPARMD,R10
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'TCBADDR(taskname)' specified (disabled)                     *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+TCBCHK   CLI   PTYPE+1,1               TCB address?
+         BNE   QCBCHK                  No, check for QCB request
+         B     RETURN
+*          LA    R9,PDTCBA                YES, SET FOR FIRST PDE
+*          MVC   WLINEH,=Y(W1LEN+4,0)     SET MSG HEADER
+* TCBPDE   BAL   R2,PDESCAN               GET NEXT PDE
+*          B     RETURN                   THAT'S ALL
+*          MVC   W1NAME,WNAME             SAVE TASK NAME
+*          BAL   R2,TCBSCAN               GET TCB ADDRESS
+*          B     TCBMISS                  INVALID NAME
+*          LR    R8,R15                   SAVE TCB ADDRESS
+*          B     TCBAFND                  PROCESS IT
+* TCBMISS  MVC   W1ADDR,XBLANKS           BLANK OUT ADDRESS
+*          MVI   W1ADDR+2,C'?'
+*          B     TCBALIST                 GO LIST IT
+*          USING TCB,R8
+* TCBAFND  ZCHK  R15,TCBLTC,TCBAFNDA      GET SUBTASK
+*          LR    R8,R15                   RESET TCB ADDRESS
+*          B     TCBAFND                  CONTINUE
+* TCBAFNDA L     R8,TCBJSTCB              NO, GET JOB STEP TCB
+*          ACON  (R8),W1ADDR              CONVERT TCB ADDRESS
+* TCBALIST BAL   R2,MSGSTD                WRITE IT OUT
+* TCBANEXT B     TCBPDE                   GET NEXT TASK
+*          SPACE 2
+*          DROP  R8
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'QCBS(taskname)' specified                                   *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+QCBCHK   CLI   PTYPE+1,2               QCB request?
+         BNE   LPACHECK                No: try LPA keyword
+         MVC   WLINEH,=Y(W2LEN+4,0)    Yes: set message header
+         MVC   WLINED,WLINEB           Clear print line
+         LINE2
+         L     R15,CVTPTR              CVT address
+         USING CVT,R15
+         L     R0,CVTFQCB              Get QCB origin
+         ST    R0,WQCBORG              Save it
+         DROP  R15
+         LA    R9,PDTCBA               Set first PDE
+QCBNMCHK BAL   R2,PDESCAN              Get next PDE
+         B     RETURN                  That's all
+         MVC   WLINE2+6(8),WNAME       Set name in header
+         LA    R0,WLINE2
+         BAL   R2,MSGDATA              Write header
+         L     R8,WQCBORG              First QCB
+QCBMAJOR LTR   R8,R8                   Anymore major QCBs?
+         BNP   QCBNEXT                 No, get next search name
+         MVC   W2QNAME,16(R8)  (MVS)   YES, SET MAJOR NAME
+         CLC   16(8,R8),=CL8'SYSDSN'   IS IT DSNAME QUEUE?
+         BE    QCBMAJOK                YES - BRANCH
+         CLC   16(8,R8),=CL8'SYSZOPEN' IS IT OPEN QUEUE?
+         BE    QCBMAJOK                YES - BRANCH
+         CLC   16(8,R8),=CL8'SYSIKJUA' IS IT TSO USERID QUEUE?
+         BE    QCBMAJOK                YES - BRANCH
+         B     QCBMAJLP                NO - GET NEXT MAJOR
+QCBMAJOK EQU   *
+         L     R7,8(,R8)               First minor QCB
+QCBMINOR LTR   R7,R7                   ANYTHING?
+         BNP   QCBMAJLP                No, get another major QCB
+         USING QEL,R6
+         L     R6,8(,R7)       (MVS)   Yes, get first QEL
+QCBQEL   LTR   R6,R6                   Anymore QELs?
+         BNP   QCBMINLP                NO, GET NEXT MINOR QCB
+         TM    QELQFLGS,QELSHARE (MVS) Yes, SHR?
+         BO    QCBTJCHK                YES, ....
+         OI    WSW,WSWAIT              NO, INDICATE ALL OTHERS WAITING
+QCBTJCHK EQU   *
+*
+*        Point R5 to JOBNAME, using ASID from QELASID
+*
+         L     R1,CVTPTR
+         USING CVT,R1
+         L     R1,CVTASVT              ASVT
+         DROP  R1                      CVT
+         USING ASVT,R1
+         LA    R1,ASVTENTY             First ASVTENTY
+         DROP  R1                      ASVT
+         LH    R15,QELASID             Address space ID
+         BCTR  R15,0
+         SLL   R15,2                   Multiply by 4
+         L     R1,0(R15,R1)            Register 1 points to ASCB
+         USING ASCB,R1
+         ICM   R5,15,ASCBJBNS          Jobname/STC name/TSU name
+         BNZ   *+8
+         LA    R5,=CL8'Starting'
+         CLC   0(5,R5),=C'INIT '       Job initiator?
+         BNE   *+8                     No, carry
+         ICM   R5,15,ASCBJBNI          Jobname
+         BNZ   *+8
+         LA    R5,=CL8'Starting'
+         DROP  R1                      ASCB
+         SPACE
+QCBQELCK CLC   WNAME,0(R5)             Desired QEL?
+         BE    QCBQELFD                Yes, list it
+         L     R6,QELNQEL              No, get next QEL
+         LA    R6,0(,R6)               Clear high-order byte
+         B     QCBQEL                  Keep looking
+QCBQELFD MVC   W2TYPE,=CL4'SHR'        Assume SHR
+         TM    QELQFLGS,QELSHARE (MVS) Yes, SHR?
+         BO    QCBQELST                YES, ...
+         MVC   W2TYPE,=CL4'EXCL'       No, set to exclusive
+         CL    R6,0(R7)                Is this the 1st QEL?
+         BE    QCBQELMC                Yes: continue
+         B     QCBQELWT                No, ....
+QCBQELST MVC   W2STAT,XBLANKS          Blank WAITING field
+         TM    WSW,WSWAIT              Waiting?
+         BZ    QCBQELMC                No, ....
+QCBQELWT MVC   W2STAT,=C'WAIT'         Indicate waiting
+         MVC   W2STAT,XBLANKS          Ignore previous instruction
+QCBQELMC MVC   W2SMC,XBLANKS           CLEAR STATUS FIELD
+*        TM    0(R6),X'30'             MUST COMPLETE?
+*        BZ    QCBQELRN                NO, WRITE OUT LINE
+*        MVC   W2SMC,=CL4'STEP'        YES, ASSUME STEP
+*        TM    0(R6),X'10'             STEP?
+*        BO    QCBQELRN                YES, ...
+*        MVC   W2SMC,=CL4'SYS'         NO, SYSTEM(SHOULD NEVER SEE IT)
+QCBQELRN MVC   W2RNAME,XBLANKS         Clear out RNAME
+         SLR   R15,R15                 Clear work register
+         IC    R15,16(R7)              RNAME length
+         LA    R0,L'W2RNAME            MAX ALLOWED
+         CR    R15,R0                  ACCEPTABLE?
+         BNH   *+6                     YES,
+         LR    R15,R0                  NO, SET TO MAX
+         BCTR  R15,0                   Length - 1
+         EX    R15,IMRNAME             Move RNAME to printline
+         BAL   R2,MSGSTD               Write it all out
+         MVC   W2QNAME,XBLANKS         Clear major name
+QCBMINLP NI    WSW,X'FF'-WSWAIT        Turn off wait bit
+         L     R7,0(,R7)      (MVS)    Next minor QCB
+         LA    R7,0(,R7)               Clear high-order byte
+         B     QCBMINOR
+QCBMAJLP L     R8,0(R8)                Next major QCB
+         LA    R8,0(R8)                Clear high-order byte
+         B     QCBMAJOR
+QCBNEXT  B     QCBNMCHK                Go get next PDE
+         DROP  R6
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'LPA(MODULE)' specified                                      *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+LPACHECK CLI   PTYPE+1,3               LPA pack search?
+         BNE   UNITCHK                 NO, ....
+         MVC   WLINEH,=Y(W3LEN+4,0)    Yes, set message header
+         MVC   WLINED,WLINEB           Clear message line
+         LA    R9,PDLPA                First PDE
+LPALOOP  BAL   R2,PDESCAN              GO GET PDE
+         B     RETURN                  THAT'S ALL
+         MVC   W3NAME,WNAME            MOVE NAME TO PRINT LINE
+         USING CDE,R15
+*
+*              Call IEAVVMSR to search LPA directory
+*
+*                  REGS 0 AND 1 - Contain name
+*                  REG 3        - Address of CVT
+*                  REGS 7 8 9   - Work registers
+*                  REG 14       - Return - Bad return 4(14)
+*                  REG 0        - Points to LPDE after good return
+*
+         LM    R0,R1,WNAME
+         STM   R7,R9,WLPA
+         L     R3,CVTPTR
+         USING CVT,R3
+         L     R15,CVTLPDSR
+         DROP  R3
+         BALR  R14,R15
+         B     LPAFOUND
+         B     LPANOTFO
+LPAFOUND LM    R7,R9,WLPA
+         LR    R15,R0
+         B     LPALIST
+LPANOTFO LM    R7,R9,WLPA
+         MVI   W3CDE+3,C'?'            INDICATE NOT FOUND
+         B     LPALISTA                GO LIST IT
+LPALIST  MVC   W3CDEL,=C'LPDE'
+         ACON  (R15),W3CDE             CONVERT CDE ADDRESS
+         MVC   W3EPL,=C'EP'
+         ACON  CDENTPT(5),W3EP         CONVERT ENTRY POINT
+         DROP  R15
+LPALISTA BAL   R2,MSGSTD               LIST IT OUT
+         MVC   WLINED,WLINEB           CLEAR OUTPUT LINE
+         B     LPALOOP                 GO GET NEXT PDE
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'UNITS(cua)' specified                                       *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+UNITCHK  CLI   PTYPE+1,4               UNIT specified?
+         BNE   VOLCHECK                No, test VOLUME
+         MVC   WLINEH,=Y(W5LEN+4,0)    Yes, set message header
+         TM    PDUNIT+6,X'80'          Specific UNITS requested?
+         BNO   VOLSETA                 No: list all DASD units
+         L     R15,CVTPTR              Yes: load CVT pointer
+         USING CVT,R15
+         L     R8,CVTILK2              UCB lookup table
+         DROP  R15                     CVT
+         ST    R8,WUCBTBL              Save lookup table address
+         OI    WSW,WSWRTJ              Right justify
+         MVC   WFILLER,XC0             Set filler
+         LA    R9,PDUNIT               Set first UCB
+UNITSCAN BAL   R2,PDESCAN              Process UCB
+         B     RETURN                  That's all
+         MVC   WLINED,WLINEB           Clear the printline
+         MVC   W5UNIT,WNAME+5          Save UNIT name
+         L     R8,WUCBTBL              UCB table start
+UNITSCNA LH    R7,0(R8)                UCB address
+         LTR   R7,R7                   Anything?
+         BZ    UNITSCNB                No, empty slot
+         BM    UNITERR                 No, the end....
+         USING UCB,R7
+         CLC   W5UNIT,UCBNAME          UNIT cua found?
+         BE    UNITFND                 Yes, set it up
+UNITSCNB LA    R8,2(R8)                NO, BUMP TABLE PTR
+         B     UNITSCNA                Keep looking
+UNITFND  CLI   UCBTBYT3,UCB3TAPE       Tape?
+         BE    UNITVOL                 Yes, set serial
+         CLI   UCBTBYT3,UCB3DACC       No, direct access?
+         BNE   UNITDATA                No, list it out
+UNITVOL  MVC   W5VOLSER,UCBVOLI        Yes, set volume serial
+         OC    W5VOLSER,W5VOLSER       Binary zeroes?
+         BNZ   *+10                    No
+         MVC   W5VOLSER,=CL6' '        Yes - make it blanks
+UNITDATA BAL   R2,UCBDATA              Write out necessary data
+         B     UNITLOOP                Keep on....
+UNITERR  MVI   W5UCB+2,C'?'            Error
+         BAL   R2,MSGSTD               Write it out
+UNITLOOP B     UNITSCAN                Get next UCB
+         DROP  R7                      UCB
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'VOLUMES(volser)' specified                                  *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+VOLCHECK CLI   PTYPE+1,5               VOLUMES requested?
+         BNE   BLDLCHK                 No, check BLDL keyword
+VOLSETA  MVC   WLINEH,=Y(W5LEN+4,0)    YES, SET MESSAGE HEADER
+         L     R15,CVTPTR              CVT
+         USING CVT,R15
+         L     R8,CVTILK2              UCB Lookup table
+         DROP  R15                     CVT
+         BAL   R2,GETUCB               Get initial UCB address
+         B     ERRUCB                  Nothing
+         S     R8,=F'2'                Backup off to first DASD UCB
+         ST    R8,WDASTART             Save this address
+         TM    PDVOL+6,X'80'           VOLUMES specified?
+         BNO   UNITSET                 NO, LIST THEM ALL
+         LA    R9,PDVOL                Yes, set first PDE
+VOLCHKB  BAL   R2,PDESCAN              Go get PDE
+         B     RETURN                  That's all
+         MVC   W5VOLSER,WNAME          Set volume serial
+         L     R8,WDASTART             Start of DASD UCBs
+         BAL   R2,GETVOL               Locate proper UCB
+         B     VOLERR                  Nothing, invalid serial
+         LR    R7,R15                  Get UCB address
+         USING UCB,R7
+         MVC   W5UNIT,UCBNAME          Move EBCDIC unit address
+         BAL   R2,UCBDATA              Check for data request
+         B     VOLCHKB                 Get next PDE
+         DROP  R7                      UCB
+VOLERR   MVC   W5UNIT(9),XBLANKS       Blank out message
+         MVI   W5UNIT+1,C'?'
+         BAL   R2,MSGSTD               WRITE IT OUT
+         B     VOLCHKB                 KEEP LOOKING
+UNITSET  L     R8,WDASTART             INITIAL DASD UCB
+UNITSETA BAL   R2,GETUCB               GET NEXT UCB
+         B     RETURN                  THAT'S ALL
+         MVC   WLINED,WLINEB           Clear output line
+         LR    R7,R15                  Get UCB address
+         USING UCB,R7
+         MVC   W5VOLSER,UCBVOLI        Volume serial
+         MVC   W5UNIT,UCBNAME          UNIT name
+         BAL   R2,UCBDATA              Check for data request
+         B     UNITSETA                Keep looking
+         DROP  R7                      UCB
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'BLDL(module)' specified                                     *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+BLDLCHK  CLI   PTYPE+1,6               Scan resident BLDL lists?
+         BNE   STORAGE                 No, ....
+         L     R15,CVTPTR              CVT
+         USING CVT,R15
+         L     R15,CVTPRLTV            TTR0 conversion routine
+         DROP  R15                     CVT
+*
+*        FOLLOWING ASSUMPTION IS HIGHLY DEPENDENT ON THE ASSEMBLY
+*        OF BLDL(SVC 18).
+*
+         S     R15,=A(X'58')           Back off to addresses
+*              R15   Points to IEARESBL
+*                    Which is IEARESBS-4 too.
+         L     R0,0(R15)               Resident LINKLIB list
+         ST    R0,WBLDLINK
+         L     R0,4(R15)               Resident SVCLIB list
+         ST    R0,WBLDSVC
+         MVC   WLINEH,=Y(W6LEN+4,0)    Set message header
+         LA    R9,PDLPA                Set first PDE
+BLDLOOP  BAL   R2,PDESCAN              Go get PDE
+         B     RETURN                  That's all
+         MVC   W6NAME,WNAME            Move name to print line
+         ICM   R15,15,WBLDLINK         Search LINKLIB first
+         BZ    BLDLS                   No - branch
+         BAL   R2,BLDLSCAN             Look for it
+         B     BLDLIST                 Got it
+BLDLS    L     R15,WBLDSVC             Nothing, new try SVCLIB
+         LTR   R15,R15                 Any?
+         BZ    BLDLQ                   No - branch
+         BAL   R2,BLDLSCAN             Go look for it
+         B     BLDLIST                 Got it this time
+BLDLQ    MVI   W6ADDR+3,C'?'           Sorry, nothing....
+         B     BLDLISTA
+BLDLIST  ACON  (R3),W6ADDR             Set entry point in print line
+BLDLISTA BAL   R2,MSGSTD               List it out
+         MVC   WLINED,WLINEB           Clear output line
+BLDLNEXT B     BLDLOOP                 Go get next PDE
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'STORAGE(name)' specified (disabled)                         *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+STORAGE  CLI   PTYPE+1,7                STORAGE keyword specified?
+         BNE   SUBPOOLS                 NO, ....
+         B     RETURN
+*          MVC   WLINEH,=Y(W7LEN+4,0)     YES, SETUP PRINT LINE
+*          TM    PDNAME+6,X'80'           WERE NAMES SPECIFIED?
+*          BO    STORTASK                 YES, GO PROCESS THEM
+*          L     R15,CVTPTR               NO, GET THE CVT ADDRESS
+*          USING CVT,R15
+*          L     R15,CVTABEND             SECONDARY CVT
+* *        USING SCVT,R15
+* *        L     R15,SCVTMSSQ             GOVRFLB
+*          DROP  R15
+*          L     R7,8(R15)                DUMMY PQE
+*          LA    R2,RETURN                SET EXIT ADDRESS FOR RETURN
+*          B     STORAGE2                 GO TO IT
+*          SPACE 2
+* STORTASK LINE2
+*          LA    R9,PDNAME                INITIAL PDE
+* STORNEXT BAL   R2,PDESCAN               CHECK IT OUT
+*          B     RETURN                   THAT'S ALL
+*          MVC   WLINE2+6(8),WNAME        TASK NAME IN HEADER
+*          LA    R0,WLINE2                MSG LINE
+*          BAL   R2,MSGDATA               LIST IT OUT
+*          BAL   R2,TCBSCAN               LOCATE DESIRED TCB
+*          B     STORNEXT                 NOTHING....
+*          USING TCB,R15                  GOT IT
+*          L     R7,TCBPQE                DUMMY PQE
+*          DROP  R15
+*          BAL   R2,STORAGE2              DO IT TO IT
+*          B     STORNEXT                 GO GET THE NEXT NAME
+*          SPACE 2
+* STORAGE2 DS    0H
+*          ST    R2,WSAVE1                SAVE LINKAGE REGISTER
+*          SLR   R0,R0                    ZERO WORK REG & CLEAR STORAGE
+*          ST    R0,WSTORCNT              ....
+*          ST    R0,WSTORSUM              ....
+*          ST    R0,WSTORMAX              ....
+*          L     R7,8(R7)                 PQE
+*          LA    R7,0(R7)                 CLEAR HI-ORDER BYTE
+*          C     R7,0(R7)                 ANY FBQE'S?
+*          BE    STORNONE                 NO, NOTHING....
+*          L     R8,0(R7)                 YES, GET FIRST FBQE
+* STORFBQE ACON  (R8),W7ADDR              LOCATION
+*          L     R1,8(R8)                 SIZE
+*          LA    R1,0(R1)
+*          SRL   R1,10                    DIVIDE BY 1024
+*          CVD   R1,WDOUBLE               TO DECIMAL
+*          MVC   W7KB,XPAT1               PATTERN
+*          ED    W7KB,WDOUBLE+5           MAKE IT PRINTABLE
+*          MVI   W7K,C'K'                 PLACE "K" IN MESSAGE
+*          C     R1,WSTORMAX              LARGEST SO FAR?
+*          BNH   STORSUM                  NO, ...
+*          ST    R1,WSTORMAX              YES, SET NEW MAXIMUM
+* STORSUM  AL    R1,WSTORSUM              UPDATE TOTAL
+*          ST    R1,WSTORSUM
+*          L     R1,WSTORCNT              UPDATE FBQE COUNT
+*          LA    R1,1(R1)
+*          ST    R1,WSTORCNT
+*          BAL   R2,MSGSTD                LIST IT
+*          L     R8,0(R8)                 GET NEXT POSSIBLE FBQE
+*          LA    R8,0(R8)
+*          CLR   R8,R7                    IS IT THE PQE?
+*          BNE   STORFBQE                 NO, PROCESS IT
+* *                                       YES, CONSTRUCT TOTAL LINE
+*          MVC   WLINED,WLINEB            CLEAR OUT PRINT LINE
+*          MVC   W7SX,=C'SUM='            SUMMATION OF ALL AREAS
+*          EDST  WSTORSUM,W7S
+*          MVI   W7SK,C'K'
+*          MVC   W7MX,=C'MAX='            LARGEST AREA
+*          EDST  WSTORMAX,W7M
+*          MVI   W7MK,C'K'
+*          MVC   W7FX,=C'#FBQES='         NUMBER OF FBQE'S
+*          EDST  WSTORCNT,W7F
+*          BAL   R2,MSGSTD                WRITE IT OUT
+*          MVC   WLINED,WLINEB            CLEAR OUT PRINT LINE
+* *
+*          B     STOR2END                 TERMINATE
+* STORNONE LA    R0,MNOFREE               INDICATE NO FREE AREA
+*          BAL   R2,MSGDATA
+* STOR2END L     R2,WSAVE1                RESTORE LINKAGE REGISTER
+*          BR    R2                       RETURN
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        'SUBPOOLS(taskname)' specified (disabled)                    *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+SUBPOOLS CLI   PTYPE+1,8                SUBPOOLS REQUESTED?
+         BNE   SVCTABLE                 NO, ....
+         B     RETURN
+*          MVC   WLINEH,=Y(W8LEN+4,0)     YES, SET MSG HEADER
+*          CLI   PDATA+1,1                DATA?
+*          BE    SUBLIST                  YES, GIVE PARTICULARS
+*          LA    R0,XSPTOT                NO, GIVE TOTALS HEADER
+*          BAL   R2,MSGDATA               TITLE LINE
+*          LA    R9,PDTCBA                INITIAL PDE
+* SUBTPDE  BAL   R2,PDESCAN               CHECK IT OUT
+*          B     RETURN                   THAT'S ALL
+*          MVC   W8XTASK,WNAME            NAME TO LINE
+*          BAL   R2,TCBSCAN               LOCATE DESIRED TCB
+*          B     SUBTPDE                  NOTHING, TRY ANOTHER
+*          USING TCB,R15
+*          ZCHK  R1,TCBMSS,SUBTPDE        SPQE CHAIN PTR
+*          ST    R1,WSPQE
+*          DROP  R15
+* SUBTSPQE XC    WDQECNT(24),WDQECNT      CLEAR COUNTERS
+*          BAL   R2,SPQECHK               GET NEXT SPQE
+*          B     SUBTPDE                  THAT'S ALL
+*          SLR   R0,R0                    CLEAR WORK REGISTER
+*          IC    R0,4(R8)                 SUBPOOL ID
+*          CVD   R0,WDOUBLE               TO DECIMAL
+*          OI    WDOUBLE+7,X'0F'          MAKE IT PRINTABLE
+*          UNPK  W8XSPID,WDOUBLE          ....
+*          LR    R7,R8                    DQE PTR - 4
+* SUBTDQE  ZCHK  R7,4(R7),SUBTLIST        DQE
+*          L     R1,12(R7)                SIZE
+*          LA    R1,0(R1)
+*          CL    R1,WDQEMAX               IS THIS ONE LARGER?
+*          BNH   *+8                      NO, ...
+*          ST    R1,WDQEMAX               YES, SET NEW MAX
+*          AL    R1,WDQESUM               UPDATE TOTAL SIZE
+*          ST    R1,WDQESUM
+*          L     R1,WDQECNT               COUNT DQE'S
+*          LA    R1,1(R1)
+*          ST    R1,WDQECNT
+*          LR    R6,R7                    SET FOR FQE'S
+* SUBTFQE  ZCHK  R6,0(R6),SUBTDQE         FQE
+*          L     R1,4(R6)                 SIZE
+*          LA    R1,0(R1)
+*          CL    R1,WFQEMAX               IS THIS ONE LARGER?
+*          BNH   *+8                      NO, ...
+*          ST    R1,WFQEMAX               YES, SET NEW MAX
+*          AL    R1,WFQESUM               UPDATE TOTAL SIZE
+*          ST    R1,WFQESUM
+*          L     R1,WFQECNT               COUNT FQE'S
+*          LA    R1,1(R1)
+*          ST    R1,WFQECNT
+*          B     SUBTFQE                  KEEP LOOKING
+* SUBTLIST EDST  WDQECNT,W8XDQES          DQE COUNT
+*          L     R0,WDQEMAX               DQE MAX BLOCK
+*          SRL   R0,10                    /1024 = # 1K BLOCKS
+*          EDR   R0,W8XDQMAX
+*          MVI   W8XDQMAX+L'W8XDQMAX,C'K'
+*          L     R0,WDQESUM               DQE TOTAL SIZE
+*          SRL   R0,10                    /1024 = # 1K BLOCKS
+*          EDR   R0,W8XDQSUM
+*          MVI   W8XDQSUM+L'W8XDQSUM,C'K'
+*          EDST  WFQECNT,W8XFQES          FQE COUNT
+*          EDST  WFQEMAX,W8XFQMAX         FQE LARGEST BLOCK
+*          EDST  WFQESUM,W8XFQSUM         FQE TOTAL SIZE
+*          BAL   R2,MSGSTD                WRITE OUT LINE
+*          MVC   W8XTASK,XBLANKS          CLEAR TASK NAME
+*          B     SUBTSPQE                 GET NEXT SUBPOOL
+*          SPACE 2
+* SUBLIST  LINE2
+*          LA    R0,MSPHDR
+*          BAL   R2,MSGDATA               TITLE LINE
+*          LA    R9,PDTCBA                INITIAL PDE
+* SUBPDE   BAL   R2,PDESCAN               CHECK IT OUT
+*          B     RETURN                   THAT'S ALL
+*          MVC   WLINE2+6(8),WNAME        NAME TO HEADER
+*          LA    R0,WLINE2
+*          BAL   R2,MSGDATA               LIST TASK NAME
+*          BAL   R2,TCBSCAN               LOCATE DESIRED TCB
+*          B     SUBPDE                   NOTHING, TRY ANOTHER
+*          USING TCB,R15
+*          ZCHK  R1,TCBMSS,SUBPDE         SPQE CHAIN PTR
+*          ST    R1,WSPQE
+*          DROP  R15
+* SUBSPQE  BAL   R2,SPQECHK               GET NEXT SPQE
+*          B     SUBPDE                   THAT'S ALL
+*          ACON  (R8),W8SPQE              SPQE ADDRESS
+*          UNPK  WCONDATA(3),0(2,R8)      SPQE FLAGS
+*          TR    WCONDATA(2),TRANS1
+*          MVC   W8FLAGS,WCONDATA         MOVE TO PRINT LINE
+*          SLR   R0,R0                    CLEAR WORK REGISTER
+*          IC    R0,4(R8)                 SUBPOOL ID
+*          CVD   R0,WDOUBLE               TO DECIMAL
+*          OI    WDOUBLE+7,X'0F'          MAKE IT PRINTABLE
+*          UNPK  W8SPID,WDOUBLE           ....
+*          LR    R7,R8                    DQE PTR - 4
+* SUBDQE   ZCHK  R7,4(R7),SUBSPQE         DQE
+*          ACON  (R7),W8DQE               DQE ADDRESS
+*          ACON  9(4,R7),W8BLK            BLOCK ADDRESS
+*          ACON  13(4,R7),W8BLKLEN        BLOCK LENGTH
+*          ZCHK  R1,12(R7),SUBLISTA       LIST NOW IF NO FQE
+*          LR    R6,R7                    SET FOR FQE'S
+* SUBFQE   ZCHK  R6,0(R6),SUBDQE          FQE
+*          ACON  (R6),W8FQE               FQE ADDRESS
+*          ACON  5(4,R6),W8FQELEN         FQE LENGTH
+* SUBLISTA BAL   R2,MSGSTD                PRINT IT OUT
+*          MVC   WLINED,WLINEB            BLANK OUT PRINT LINE
+*          B     SUBFQE                   ON TO THE NEXT FQE
+         EJECT
+*
+*        THIS FUNCTION DEPENDS ON AN ASSEMBLED OFFSET IN
+*        THE SVCTABLE - USERORG.  IN THIS ROUTINE IT IS
+*        EQUIVALENCED TO ZUSERORG.
+*
+SVCTABLE CLI   PTYPE+1,9               SVCTABLE requested?
+         BNE   ADDRCHK                 No: test ADDRESS keyword
+         MVC   WLINEH,=Y(W9LEN+4,0)    Yes, set message header
+         OI    WSW,WSWRTJ              Right justify
+         MVC   WFILLER,XC0             Filler
+         L     R15,CVTPTR              CVT
+         USING CVT,R15
+         L     R15,CVTABEND            SECONDARY CVT
+         USING SCVT,R15
+         L     R0,SCVTSVCT             SVCTABLE
+         ST    R0,WSVCTBL              Save starting location
+         DROP  R15                     CVT, SCVT
+         LA    R9,PDSVC                INITIAL PDE
+SVCPDE   BAL   R2,PDESCAN              CHECK OUT PDE
+         B     RETURN                  THAT'S ALL
+         MVI   W9LINE,C' '
+         MVC   W9LINE+1(W9LEN-1),W9LINE
+         PACK  WDOUBLE,WNAME           CONVERT SVC NUMBER
+         MVC   W9SVC,XPAT2             PATTERN
+         ED    W9SVC,WDOUBLE+6         EDIT SVC NUMBER
+         CVB   R15,WDOUBLE             TO BINARY
+         L     R8,WSVCTBL              SET IBM BASE
+         SLL   R15,3                   SVC# * 8
+         LA    R15,0(R15,R8)           SVCTABLE ENTRY
+         USING SVCENTRY,R15
+         ACON  (R15),W9ADDT            ADDRESS OF SVCTABLE ENTRY
+         MVI   W9TRANS,C' '
+         TM    SVCATTR1,X'C0'          TRANSIENT?
+         BNO   SVCRES                  NO, RESIDENT
+         MVI   W9TRANS,C'T'            YES, INDICATE
+         B     SVCADDRE
+SVCRES   BZ    SVCRES1                 TYPE 1
+         TM    SVCATTR1,X'80'          TYPE 2
+         BNO   SVCADDRE                NO - LEAVE BLANK
+         MVI   W9TRANS,C'2'            YES - TYPE 2
+         B     SVCADDRE
+SVCRES1  MVI   W9TRANS,C'1'            TYPE 1
+SVCADDRE EQU   *
+         ACON  SVCADDR(4),W9ADDR       SVC ADDRESS
+         TM    SVCATTR1,X'08'          APF authorization required?
+         BZ    *+8                     No, carry on
+         MVI   W9AUTH,C'A'
+         LA    R1,W9LOCKS
+         LA    R14,SVCLOCKS
+         TM    0(R14),X'80'
+         BZ    *+14
+         MVC   0(5,R1),=C'LOCAL'
+         LA    R1,6(,R1)
+         TM    0(R14),X'40'
+         BZ    *+14
+         MVC   0(3,R1),=C'CMS'
+         LA    R1,4(,R1)
+         TM    0(R14),X'20'
+         BZ    *+14
+         MVC   0(3,R1),=C'SRM'
+         LA    R1,4(,R1)
+         TM    0(R14),X'10'
+         BZ    *+14
+         MVC   0(6,R1),=C'SALLOC'
+         LA    R1,7(,R1)
+         TM    0(R14),X'08'
+         BZ    *+14
+         MVC   0(4,R1),=C'DISP'
+         LA    R1,5(,R1)
+         DROP  R15                     SVCENTRY
+SVCLIST  BAL   R2,MSGSTD               LIST IT
+         B     SVCPDE                  Process all requests
+         EJECT
+*---------------------------------------------------------------------*
+*                                                                     *
+*        ADDRESS(location. length)                                    *
+*                                                                     *
+*---------------------------------------------------------------------*
+         SPACE
+ADDRCHK  CLI   PTYPE+1,10              LIST REQUEST?
+         BNE   RETURN                  NO, ...
+         TM    PADDRESS+6,X'80'        Load name specified?
+         BO    ERRADDR                 Yes, error
+         TM    PADDRESS+14,X'80'       NO, ENTRY NAME?
+         BO    ERRADDR                 Yes, error
+         TM    PADDRESS+22,X'80'       No, address string?
+         BNO   TCBCHK                  NO, CONTINUE CHECKING ELSEWHERE
+         CLI   PADDRESS+24,0           YES, ABSOLUTE ADDRESS?
+         BNE   ERRADDR                 NO, ERROR
+         MVC   WLINEH,=Y(W13LEN+4,0)   YES, SET MSG HEADER
+         MVI   W13AST1,C'*'            INSERT DELIMITORS
+         MVI   W13AST2,C'*'
+         OI    WSW,WSWRTJ              Right justify
+         MVC   WFILLER,XC0             FILLER
+         LA    R9,PADDRESS+16          PDE pointer
+         BAL   R2,PDESET               Get address
+         B     ERRADDR                 Nothing?
+         TR    WNAME,TRANS2            Translate
+         PACK  WDOUBLE(5),WNAME(9)     Pack into hex
+         L     R3,WDOUBLE              Get starting address
+         LA    R9,PDLENGTH             Get length PDE
+         BAL   R2,PDESET               Get value
+         B     ERRADDR                 Nothing?
+         PACK  WDOUBLE,WNAME           Pack decimal value
+         LA    R7,ESTAERGS
+         XC    ESTAEL(L#ESTAEL),ESTAEL
+         ESTAE RECOVER,PARAM=(7),MF=(E,ESTAEL) Establish ESTAE
+         CVB   R5,WDOUBLE              Make it binary
+ADDRLAST LA    R5,0(R3,R5)             Get ending address + 1
+         BCTR  R5,0                    Minus 1....
+         LA    R4,16                   Incremental length
+ADDRLOOP LR    R1,R3                   Data start
+         ACON  (R1),W13ADDR            Convert address
+         LR    R14,R4                  Length of data
+         LA    R15,W13DATAX            Output location
+         BAL   R2,CONVERT              Convert to HEX
+         MVC   W13DATAC,0(R3)          Move to char. string location
+         TR    W13DATAC,TRANS3         Translate to printable only
+         BAL   R2,MSGSTD               Print it out
+         BXLE  R3,R4,ADDRLOOP          Get them all
+         B     RETURN                  That's all....
+         EJECT
+ERRADDR  LA    R0,MINVADDR             Invalid address
+         B     ERROR
+ERRPARSE LA    R0,MPARSERR             PARSE ERROR
+         B     ERROR
+ERRUCB   LA    R0,MUCBERR              UCB error
+ERROR    BAL   R2,MSGINFOR             Issue error message
+         SPACE 2
+RETURN   ESTAE 0                       Kill ESTAE environment
+         TM    WSW,WSWDATA             Data still to be written?
+         BNO   RETURNA                 No, ready
+         LM    R3,R4,WDBLKA            Yes, get data start & length
+         SLR   R3,R4                   Back off to last line
+         XC    0(4,R3),0(R3)           Clear forward line pointer
+         BAL   R2,MSGLIST              Write on terminal
+RETURNA  TM    WSW,WSWPUTL             IKJPUTL loaded from CVT?
+         BNZ   SKIPDEL                 Yes, skip DELETE
+         DELETE EPLOC=LPUTL            Delete PUTLINE
+SKIPDEL  EQU   *
+         IKJRLSA WANS                  Release parse area
+         LR    R1,R13
+         L     R13,4(,R13)             Load caller's save area
+         FREEMAIN R,LV=WORKLEN,A=(1)   Get rid of working storage
+         LA    R15,0
+         L     R14,12(,R13)
+         LM    0,12,20(R13)
+         BR    R14                     Return to TSO TMP
+         EJECT
+UCBDATA  DS    0H
+         ST    R7,WDOUBLE              UCB address
+         UNPK  W5UCB(5),WDOUBLE+2(3)   Make it printable
+         TR    W5UCB,TRANS1            ...
+         MVI   W5UCB+4,C' '            Clear random byte
+         CLI   PDATA+1,1               No, data requested?
+         BNE   UKBSTATS                No, print status
+         ST    R2,WSAVE1               Yes, save return register
+         LR    R3,R7                   Set UCB start
+         LA    R4,16                   Section length
+         LA    R5,63(R3)               UCB data end
+UCBDATAB LR    R1,R3                   Data start
+         LR    R14,R4                  Section length
+         LA    R15,W5DATA              Output location
+         BAL   R2,CONVERT              Convert HEX data
+         BAL   R2,MSGSTD               Print
+         MVC   WLINED,WLINEB           Clear printline
+         BXLE  R3,R4,UCBDATAB          Loop until all done
+UCBDATAX L     R2,WSAVE1               Restore return register
+         BR    R2                      Return
+         SPACE 2
+CONVERT  DS    0H                      Entry: BAL R2,CONVERT
+         STM   R3,R5,WCSAVE            Save work registers
+         LR    R3,R1                   Start of data
+         LA    R4,4                    Item length
+         LA    R5,0(R3,R14)            End of data + 1
+         BCTR  R5,0
+CONVERTA UNPK  WCONDATA,0(5,R3)        Unpack
+         TR    WCONDATA(8),TRANS1      Make it printable
+         MVC   2(8,R15),WCONDATA       Move to output area
+         LA    R15,10(R15)             Bump output pointer
+         BXLE  R3,R4,CONVERTA          Loop until all done
+         LM    R3,R5,WCSAVE            Restore work registers
+         BR    R2                      return
+         EJECT
+         USING UCB,R7
+UKBSTATS DS    0H
+         ST    R2,WSAVE1               Save return register
+         ST    R7,WDOUBLE              UCB address
+         UNPK  W5UCB(5),WDOUBLE+2(3)   Make if printable
+         TR    W5UCB,TRANS1            ...
+         MVI   W5UCB+4,C' '            Clear random byte
+         MVI   W5STAT,C' '
+         MVC   W5STAT+1(W5SLENT-1),W5STAT
+         CLI   UCBTYP+2,UCB3DACC       Direct access?
+         BE    UKBDISK                 Yes, carry
+         CLI   UCBTYP+2,UCB3TAPE       Tape?
+         BE    UKBTAPE                 Yes, carry
+         B     UKBPRT                  Else print UCB
+UKBDISK  LA    R2,=CL6'2314'
+         CLI   UCBTYP+3,8              2314
+         BE    UKBDISKT
+         LA    R2,=CL6'3330'
+         CLI   UCBTYP+3,9              3330
+         BE    UKBDISKT
+         LA    R2,=CL6'3330-1'
+         CLI   UCBTYP+3,13             3330-1
+         BE    UKBDISKT
+         LA    R2,=CL6'3350'
+         CLI   UCBTYP+3,11             3350
+         BE    UKBDISKT
+         LA    R2,=CL6'3375'
+         CLI   UCBTYP+3,12             3375
+         BE    UKBDISKT
+         LA    R2,=CL6'3380'
+         CLI   UCBTYP+3,14             3380
+         BE    UKBDISKT
+         LA    R2,=CL6'3390'
+         CLI   UCBTYP+3,15             3390
+         BE    UKBDISKT
+         LA    R2,=CL6' '              None of above
+UKBDISKT MVC   W5STYPE,0(R2)           Device type name
+         TM    UCBTYP+1,8              MSS virtual 3330, UCBRVDEV
+         BZ    *+8                     No, skip next instruction
+         MVI   W5STYPE+4,C'V'          Change 3330 to 3330V
+         TM    UCBTBYT2,UCBRR          Shared?
+         BZ    *+10                    No
+         MVC   W5SSHR,=C'Shared'       Yes
+         MVC   W5SPRIV,=C'Remov. '     YES
+         TM    UCBSTAB,UCBBPRV         Use attribute PRIVATE?
+         BZ    UKBSTVS1                No, carry
+         MVC   W5SPRIV,=C'Private'     YES
+UKBSTVS1 TM    UCBSTAB,UCBBSTR         Use attribute STORAGE?
+         BZ    UKBSTVS2                N0, carry
+         MVC   W5SPRIV,=C'Storage'     YES
+UKBSTVS2 TM    UCBSTAB,UCBBPUB         Use attribute PUBLIC?
+         BZ    UKBSTVS3                No, carry
+         MVC   W5SPRIV,=C'Public '     YES
+UKBSTVS3 EQU  *
+         TM    UCBSTAT,UCBPRES         Mount attribute RESIDENT?
+         BZ    UKBSTDV1                No: carry
+         MVC   W5SPRES,=C'Resident'    YES
+UKBSTDV1 TM    UCBSTAT,UCBRESV         Mount attribute RESERVED?
+         BZ    UKBSTDV2                No: skip
+         MVC   W5SPRES,=C'Reserved'    YES
+UKBSTDV2 EQU   *
+         TM    UCBSTAT,UCBALOC         Allocated?
+         BO    *+10                    Yes: carry on
+         MVC   W5SALLO,=C'Not-allocated' NO
+         TM    UCBFLA,UCBNRY           Ready?
+         BZ    *+10                    Yes: carry on
+         MVC   W5SALLO,=C'Not-ready    ' NO
+         TM    UCBSTAT,UCBONLI         Online?
+         BO    *+10                    Yes: carry on
+         MVC   W5SPRIV(9),=C'Offline  '
+         B     UKBPRT
+UKBTAPE  EQU   *
+         OC    W5VOLSER,W5VOLSER       Volume serial present?
+         BZ    UKBPRT                  No: print
+         TM    UCBFLA,UCBNRY           READY?
+         BZ    *+10                    Yes: carry on
+         MVC   W5SPRIV(9),=C'Not-ready    ' NO
+         B     UKBPRT                  Ready
+UKBNDA   EQU   *
+UKBPRT   EQU   *                       Entry: BAL R2,UKBPRT
+         BAL   R2,MSGSTD               Print output line
+         L     R2,WSAVE1               Restore retrun register
+         BR    R2                      Return
+         DROP  R7
+         SPACE 2
+CONVERTB DS    0H
+         UNPK  WCONDATA,0(5,R1)        Unpack input
+         TR    WCONDATA(8),TRANS1      Make if printable
+         BCTR  R14,0                   Output length - 1
+         EX    R14,IMCON               Move data to output line
+         BR    R2                      Return
+         EJECT
+MSGINFOR DS    0H                      Entry: BAL R2,MSGINFOR
+         XC    WECB,WECB               Clear ECB
+         L     R15,WPUTL               PUTLINE routine
+         PUTLINE OUTPUT=((R0),,,DATA),ENTRY=(15),MF=(E,WIOPL)
+         BR    R2                      Return
+         SPACE 2
+MSGSTD   DS    0H                      Message routine (BAL R2,MSGSTD)
+         LA    R0,WLINEH               Standard message area
+MSGDATA  STM   R2,R5,WDSAVE            Save work registers
+         LM    R3,R5,WDBLKA            Load work registers
+         OI    WSW,WSWDATA             Indicate data to write
+         LR    R1,R0                   Starting data address
+         MVC   4(WDBLKENT-4,R3),0(R1)  MOVE PRINT LINE IN
+         BXLE  R3,R4,MSGRET            Continue if more lines remain
+         BAL   R2,MSGLIST              Else, write the block out
+         L     R3,WDBLK                Get block start
+MSGRET   ST    R3,WDBLKA               Reset line pointer
+         LR    R15,R3                  Also return it in register 15
+         LM    R2,R5,WDSAVE            Restore work registers
+         BR    R2                      Return
+         SPACE 2
+MSGLIST  DS    0H                      Block list routine (BAL R2)
+         XC    WECB,WECB               Clear ECB
+         L     R0,WDBLK                Block start
+         L     R15,WPUTL               PUTLINE routine
+         PUTLINE OUTPUT=((R0),,MULTLIN,DATA),ENTRY=(15),MF=(E,WIOPL)
+         NI    WSW,X'FF'-WSWDATA       Indicate block written
+         BR    R2                      Return
+         EJECT
+TCBSCAN  DS    0H                      TCB look-up routine
+         L     R15,WTCBA               Starting TCB
+         USING TCB,R15
+TCBSCANA ZCHK  R1,TCBTIO,TCBSCANX      TIOT
+         CLC   WNAME,0(R1)             Desited task?
+         BE    TCBSCANY                Yes, process if
+TCBSCANX L     R15,TCBTCB              GET NEXT TCB
+         LA    R15,0(R15)
+         LTR   R15,R15                 Anymore?
+         BP    TCBSCANA                Yes, ....
+         BR    R2                      No, return
+TCBSCANY LR    R14,R15                 Save TCB address
+         ZCHK  R15,TCBLTC,TCBSCANY,BC=NZ     get subtask TCB
+         DROP  R15
+         USING TCB,R14
+         L     R15,TCBJSTCB            Get jobstep TCB
+         B     4(R2)                   Return
+         DROP  R14
+         SPACE 2
+SPQECHK  DS    0H                      SPQE determination routine
+         ZCHK  R8,WSPQE,R2,BC=ZR       Is there an another SPQE?
+         MVC   WSPQE,0(R8)             Yes, save next pointer on chain
+         TM    0(R8),X'80'             Shared SUBPOOL?
+         BNO   4(R2)                   No, return
+         L     R8,4(,R8)               Yes, get actuel SPQE address
+         LA    R8,0(,R8)               Clear high-order byte
+         B     4(R2)                   Return
+         EJECT
+GETVOL   DS    0H
+         OI    WSW,WSWVOL              Indicate volser check
+GETUCB   LH    R15,0(R8)               UCB address
+         LTR   R15,R15                 Valid?
+         BZ    GETBUMP                 No, empty entry
+         BCR   4,R2                    No, all done
+         USING UCB,R15
+         CLI   UCBTBYT3,UCB3DACC       Is it a DASD UCB
+         BNE   GETBUMP                 No: next UCB
+         TM    UCBSTAT,UCBONLI         Yes: online?
+         BZ    GETBUMP                 No: next UCB
+         TM    WSW,WSWVOL              Yes: do we check volume serial?
+         BZ    GETRET                  No: return
+         CLC   UCBVOLI,W5VOLSER        Does volser match?
+         BE    GETRET                  Yes: return
+GETBUMP  LA    R8,2(R8)                Next UCB pointer
+         B     GETUCB                  Continue
+GETRET   NI    WSW,X'FF'-WSWVOL        Reset volser flag
+         LA    R8,2(R8)                Next UCB pointer
+         B     4(R2)                   Return
+         DROP  R15
+         EJECT
+BLDLSCAN DS    0H                      Scan resident BLDL list
+         LA    R3,4(R15)               Start of list
+         LH    R4,2(R15)               Entry length
+         LH    R5,0(R15)               # of entries
+BLDLSCNA CLC   WNAME,0(R3)             Correct name?
+         BER   R2                      Yes: got it
+         LA    R3,0(R3,R4)             No: load next entry
+         BCT   R5,BLDLSCNA             Keep looking
+         B     4(R2)                   Nothing: return to NSI
+         SPACE 2
+PDESCAN  DS    0H                      PDE scanning routine
+         LA    R9,0(,R9)               Clear high-order byte
+         LTR   R9,R9                   Anything found?
+         BZR   R2                      No: that's all
+         TM    6(R9),X'80'             Yes: is field present?
+         BO    PDESET                  Yes: set it up
+         L     R9,8(R9)                No: get next PDE
+         B     PDESCAN                 ... and try again
+PDESET   L     R15,0(R9)               Field start
+         LH    R1,4(R9)                Field length
+         SLR   R14,R14                 Default offset
+         TM    WSW,WSWRTJ              Right justify?
+         BNO   PDESCLOC                No, ....
+         LA    R14,L'WNAME             Yes, get maximum length
+         SR    R14,R1                  Minus length for offset
+PDESCLOC LA    R14,WNAME(R14)          Start of data
+         BCTR  R1,0                    Length - 1
+         MVC   WNAME,WFILLER           Fill in NAME field
+         EX    R1,IMNAME               Move name
+         L     R9,8(R9)                Set for next PDE
+         B     4(R2)                   Return to NSI
+         EJECT
+         PRINT NOGEN
+MPARSERR WTO   ' Parse error',MF=L
+MUCBERR  WTO   ' UCB look-up error',MF=L
+MNOFREE  WTO   ' There is no free main storage',MF=L
+MNOMSTCB WTO   ' Unable to locate Master Scheduler TCB(??)',MF=L
+MADDRERR WTO   ' Storage inaccessible',MF=L
+MSPHDR   DS    0F
+         DC    Y(MSPHDRL,0)
+         DC    CL8'  SPQE',CL7' FLGS',CL6'SPID'
+         DC    CL8'  DQE',CL8'  BLK',CL8'LENGTH'
+         DC    CL8'  FQE',CL8'LENGTH'
+MSPHDRL  EQU   *-MSPHDR
+MINVADDR WTO   ' Invalid address specified',MF=L
+         PRINT GEN
+         EJECT
+*---------------------------------------------------------------------*
+*
+*        ESTAE exit, try to recover from abends.
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+RECOVER  DS    0H
+         DROP  ,
+         USING *,R15                   Get temporary addressability
+         USING SDWA,R1                 Get addressability over sdwa
+         CH    R0,=H'12'               Is there an SDWA
+         BE    SETRP00                 No: continue with abend
+         XR    R7,R7                   Clear register 7
+         ICM   R7,7,SDWACMPC           Insert completion code
+         CLM   R7,6,=X'0C40'           0C4 abend?
+         BNE   SETRP00                 Continue with abend if not
+         SRL   R7,12                   Shift out user completion code
+         B     SETRP04                 Retry
+SETRP00  DS    0H
+         XR    R15,R15                 Else continue with abend
+         BR    R14                     Branch to RTM (percolate)
+SETRP04  DS    0H
+         L     R3,SDWAPARM             PARM with registers 11-13
+         MVC   SDWASR11(12),0(R3)      Restore registers 11-13
+         SETRP RC=4,RETADDR=RET,RETREGS=YES,FRESDWA=YES,               X
+               DUMP=NO
+         DROP  R1,R15                  SDWA and RECOVER
+         BR    R14                     Branch to rtm
+RET      DS    0H
+         DROP  ,
+         USING DISPLAY,R11,R12         Make module addressable again
+         USING WORKAREA,R13            Our working storage
+         LA    R0,MADDRERR             Error message
+         BAL   R2,MSGINFOR
+         B     RETURN                  Retry successful
+         DS    0D
+LPUTL    DC    CL8'IKJPUTL'
+LPARSE   LINK  EP=IKJPARS,SF=L
+IMCON    MVC   0(*-*,R15),WCONDATA
+IMNAME   MVC   0(*-*,R14),0(R15)
+IMRNAME  MVC   W2RNAME(*-*),20(R7)
+         SPACE 2
+XBLANKS  DC    CL64' '
+XC0      DC    8C'0'
+XMSNAME  DC    CL16'Master  schedulr'
+XPAT1    DC    X'402020202120'
+XPAT2    DC    X'40202120'
+XPAT3    DC    X'40206B2020206B202120'
+XSTAT    DC    C'SA=XX,F1=XX,SB=XX,RSV=XXYY,RQE=AAAA,SEEK=CCHH'
+XSPTOT   DS    0F
+         DC    Y(XSPTOTL,0)
+         DC    CL11' ',CL7'SPID'
+         DC    CL12'#DQES',CL8'MAX',CL6'SUM'
+         DC    CL10'#FQES',CL8'MAX',CL6'SUM'
+XSPTOTL  EQU   *-XSPTOT
+         EJECT
+         DS    0F
+TRANS1   EQU   *-C'0'
+         DC    C'0123456789ABCDEF'
+         DS    0F
+TRANS2   EQU   *-C'A'
+         DC    X'0A0B0C0D0E0F',XL41'0'
+         DC    C'0123456789'
+         DS    0F
+TRANS3   DC    256C'.'
+         TRANS C' '
+         TRANS X'4A',7
+         TRANS X'5A',8
+         TRANS C',',5
+         TRANS C':',6
+         TRANS X'81',9
+         TRANS X'91',9
+         TRANS X'A2',8
+         TRANS C'A',9
+         TRANS C'J',9
+         TRANS C'S',8
+         TRANS C'0',10
+         ORG
+         EJECT
+         LTORG
+         EJECT
+         PRINT NOGEN
+DISPPCL  IKJPARM
+*
+PTYPE    IKJKEYWD
+#1       IKJNAME  'TCBADDR',SUBFLD=PSTCBA
+#2       IKJNAME  'QCBS',SUBFLD=PSTCBA
+#3       IKJNAME  'LPA',SUBFLD=PSLPA
+#4       IKJNAME  'UNITS',SUBFLD=PSUNIT
+#5       IKJNAME  'VOLUMES',SUBFLD=PSVOL
+#6       IKJNAME  'BLDL',SUBFLD=PSLPA
+#7       IKJNAME  '$TORAGE',SUBFLD=PSNAME
+#8       IKJNAME  'SUBPOOLS',SUBFLD=PSTCBA
+#9       IKJNAME  'SVCTABLE',SUBFLD=PSSVC
+#10      IKJNAME  'ADDRESS',SUBFLD=PSADDR
+*
+PDATA    IKJKEYWD
+         IKJNAME  'DATA',SUBFLD=PSLPA
+         IKJNAME  'STATUS'
+*
+PSTCBA   IKJSUBF
+PDTCBA   IKJIDENT 'TASK NAME',LIST,MAXLNTH=8,OTHER=ALPHANUM,           W
+               PROMPT='TASK NAME(S)'
+*
+PSNAME   IKJSUBF
+PDNAME   IKJIDENT 'NAME(S)',LIST,MAXLNTH=8,OTHER=ALPHANUM
+*
+PSUNIT   IKJSUBF
+PDUNIT   IKJIDENT 'UNIT NAMES',LIST,MAXLNTH=3,                         W
+               FIRST=ALPHANUM,OTHER=ALPHANUM
+*
+PSVOL    IKJSUBF
+PDVOL    IKJIDENT 'VOL-IDS',LIST,MAXLNTH=6,OTHER=ALPHANUM
+*
+PSLPA    IKJSUBF
+PDLPA    IKJIDENT 'MODULES',LIST,MAXLNTH=8,OTHER=ALPHANUM
+*
+PSSVC    IKJSUBF
+PDSVC    IKJIDENT 'SVCS',LIST,MAXLNTH=3,FIRST=NUMERIC,OTHER=NUMERIC,   W
+               PROMPT='SVC NUMBERS'
+*
+PSADDR   IKJSUBF
+PADDRESS IKJPOSIT ADDRESS,RANGE,PROMPT='DATA ADDRESS'
+PDLENGTH IKJIDENT 'LENGTH',MAXLNTH=8,FIRST=NUMERIC,OTHER=NUMERIC,      W
+               DEFAULT='32'
+*
+         IKJENDP
+         PRINT GEN
+         EJECT
+WORKAREA DSECT
+WSAVE    DS    9D
+WDOUBLE  DS    D
+WSAVE1   DS    F
+WCSAVE   DS    3F
+WTJB     DS    A
+WMSTCB   DS    A
+WTCBA    DS    A
+WSPQE    DS    A
+WLPALINK DS    A
+WLPASVC  DS    A
+WLPATSO  DS    A
+WUCBTBL  DS    0A
+WDASTART DS    A
+WPUTL    DS    A
+WANS     DS    A
+WECB     DS    F
+WQCBORG  DS    A
+WSVCTBL  DS    A
+WDBLK    DS    A
+WDBLKENT EQU   88
+WDBLKLEN EQU   23*WDBLKENT
+WDBLKA   DS    3A
+WDSAVE   DS    4F
+WPPL     DS    XL28
+WIOPL    DS    XL16
+WPTPB    DS    XL12
+WLPA     DS    3F
+WNAME    DS    CL8
+WFILLER  DS    CL8
+         SPACE 2
+WCMDWORK DS    0D
+WBLDLINK DS    A
+WBLDSVC  DS    A
+         ORG   WCMDWORK
+WSTORSUM DS    F
+WSTORMAX DS    F
+WSTORCNT DS    F
+         ORG   WCMDWORK
+WDQECNT  DS    F
+WDQEMAX  DS    F
+WDQESUM  DS    F
+WFQECNT  DS    F
+WFQEMAX  DS    F
+WFQESUM  DS    F
+         ORG
+         EJECT
+WLINEH   DS    0F,2Y
+WLINE    DS    0F
+WLINEB   DS    C
+WLINED   DS    CL78
+         ORG   WLINED
+W1LINE   DS    0C
+W1NAME   DS    CL8,CL2
+W1ADDR   DS    CL6
+W1LEN    EQU   *-WLINE
+         ORG   WLINED
+W2LINE   DS    0C
+W2QNAME  DS    CL8,CL2
+W2TYPE   DS    CL4,CL2
+W2RNAME  DS    CL44,CL2
+W2STAT   DS    CL4,CL2
+W2SMC    DS    CL4
+W2LEN    EQU   *-WLINE
+         ORG   WLINED
+W3LINE   DS    0C
+W3NAME   DS    CL8,CL2
+W3CDEL   DS    CL4,CL1
+W3CDE    DS    CL6,CL2
+W3EPL    DS    CL2,CL1
+W3EP     DS    CL6
+W3LEN    EQU   *-WLINE
+         ORG   WLINED
+W5LINE   DS    0C
+W5VOLSER DS    CL6,CL2
+W5UNIT   DS    CL3,CL2
+W5UCB    DS    CL4,CL2
+W5DATA   DS    CL48
+         ORG   W5DATA
+W5STAT   DS    CL3
+W5STYPE  DS    CL6,CL2
+W5SPRIV  DS    CL7,CL2
+W5SPRES  DS    CL8,CL2
+W5SALLO  DS    CL13,CL2
+W5SSHR   DS    CL6,CL2
+W5SLENT  EQU   *-W5STAT
+         ORG
+W5LEN    EQU   *-WLINE
+         ORG   WLINED
+W6LINE   DS    0C
+W6NAME   DS    CL8,CL2
+W6ADDR   DS    CL6
+W6LEN    EQU   *-WLINE
+         ORG   WLINED
+W7LINE   DS    0C
+W7ADDR   DS    CL6,CL2
+W7KB     DS    CL6
+W7K      DS    C
+         ORG   W7LINE
+         DS    CL4
+W7SX     DS    C'SUM='
+W7S      DS    CL6
+W7SK     DS    C'K',CL5
+W7MX     DS    C'MAX='
+W7M      DS    CL6
+W7MK     DS    C'K',CL5
+W7FX     DS    C'#FBQES='
+W7F      DS    CL6
+W7LEN    EQU   *-WLINE
+         ORG   WLINED
+W8LINE   DS    0C
+W8SPQE   DS    CL6,CL2
+W8FLAGS  DS    CL2,CL4
+W8SPID   DS    CL3,CL3
+W8DQE    DS    CL6,CL2
+W8BLK    DS    CL6,CL2
+W8BLKLEN DS    CL6,CL2
+W8FQE    DS    CL6,CL2
+W8FQELEN DS    CL6
+         ORG   W8LINE
+W8XLINE  DS    0C
+W8XTASK  DS    CL8,CL2
+W8XSPID  DS    CL3,CL3
+W8XDQES  DS    CL6,CL3
+W8XDQMAX DS    CL6,CL2
+W8XDQSUM DS    CL6,CL3
+W8XFQES  DS    CL6,CL2
+W8XFQMAX DS    CL6,CL2
+W8XFQSUM DS    CL6
+W8LEN    EQU   *-WLINE
+         ORG   WLINED
+W9LINE   DS    0C
+W9SVC    DS    CL4,CL3
+W9ADDR   DS    CL6
+         DS    C
+W9TRANS  DS    C
+         DS    C
+W9AUTH   DS    C
+         DS    C
+W9ADDT   DS    CL6,C
+W9LOCKS  DS    CL25
+W9LEN    EQU   *-WLINE
+         ORG   WLINED
+W10LINE  DS    0C
+W10NAME  DS    CL44
+         ORG   W10LINE
+W10DEVT  DS    CL8,CL2
+W10VOL   DS    CL6,CL2
+W10CVOL  DS    CL6,CL2
+W10TMCNT DS    CL10,CL2
+W10CCHHR DS    CL10,CL2
+W10TTR   DS    CL6
+W10LEN   EQU   *-WLINE
+         ORG   WLINED
+W13LINE  DS    0C
+W13ADDR  DS    CL6,CL2
+W13DATAX DS    4CL10,CL5
+W13AST1  DS    C
+W13DATAC DS    CL16
+W13AST2  DS    C
+W13LEN   EQU   *-WLINE
+         ORG
+         SPACE 2
+         DS    0F
+WLINE2   DS    CL16
+WSW      DS    X
+WSWVOL   EQU   X'80'
+WSWAIT   EQU   X'40'
+WSWRTJ   EQU   X'20'
+WSWDATA  EQU   X'10'
+WSWPUTL  EQU   X'08'                   IKJPUTL present in CVT
+WCONDATA DS    XL9
+         DS    0D
+ESTAEL   ESTAE MF=L
+L#ESTAEL EQU   *-ESTAEL
+ESTAERGS DS    3F
+WORKLEN  EQU   *-WORKAREA
+         EJECT
+         IKJCPPL
+         IKJPPL
+         IKJIOPL
+CDE      DSECT
+CDATTR   DS    0X                      Attribute field
+CD1LPA   EQU   X'80'                   Module is resident in the LPA
+CD1FTCH  EQU   X'40'                   Module is being fetched
+CD1RENT  EQU   X'20'                   Module is reentrant
+CD1REUS  EQU   X'10'                   Module is serially reusable
+CD1NREU  EQU   X'08'                   Module may not be reused
+CD1MINR  EQU   X'04'                   This is a minor CDE
+CD1JPA   EQU   X'02'                   Module is in the Job Pack Area
+CD1NOL   EQU   X'01'                   Module is not only loadable
+CDCHAIN  DS    A                       Next CDE in this queue
+CDROLL   DS    0X                      Reserved
+CDRBP    DS    A                       RB address
+CDNAME   DS    CL8                     Module, alias or entry name
+CDUSE    DS    0FL1                    Use/responsibility count
+CDENTPT  DS    A                       Module entry point
+CDATTR2  DS    0X                      Attribute field 2
+CD2NACT  EQU   X'40'                   Inactive module, OK to release
+CD2EXTL  EQU   X'20'                   EXTENT LIST EXISTS FOR MODULE
+CD2REAL  EQU   X'10'                   CDE CONTAINS RELOCATED ALIAS EP
+CD2REFR  EQU   X'08'                   Module is refreshable
+CD2OVLY  EQU   X'04'                   OVERLAY
+CDXLMJP  DS    A                       Extent list/Major CDE address
+CDLEN    EQU   *-CDE
+         SPACE 2
+LLE      DSECT
+LLECHAIN DS    A                       A(NEXT ELEMENT ON LOAD LIST)
+LLEUSE   DS    0FL1                    Responsibility count
+LLECDE   DS    A                       CDE for module
+         SPACE 2
+SVCENTRY DSECT                         SVCTABLE ENTRY
+SVCEP    DS    0A
+         DS    C
+SVCADDR  DS    AL3
+SVCATTR1 DS    H
+SVCLOCKS DS    H
+         EJECT
+         PRINT GEN
+*        IKJTCB
+**             TASK CONTROL BLOCK
+**
+**
+TCB      DSECT
+         ORG   TCB+X'0C'
+TCBTIO   DS    A
+         ORG   TCB+X'18'
+TCBMSS   DS    0A
+         ORG   TCB+X'24'
+TCBLLS   DS    A       ADDR OF LAST LLE IN LOAD LIST
+         ORG   TCB+X'74'
+TCBTCB   DS    A       ADDR OF NEXT LOWER PRIO TCB ON RDY Q
+         ORG   TCB+X'7C'
+TCBJSTCB DS    0A      ADDR OF 1ST JOBSTEP TCB
+         ORG   TCB+X'84'
+TCBOTC   DS    A       ADDR OF MOTHER TCB
+TCBLTC   DS    A       ADDR OF LAST DAUGHTER TCB
+         ORG   TCB+X'98'
+TCBPQE   DS    A       POINTER TO DPQE MINUS 8 FOR JOBSTEP
+         SPACE 2
+         CVT   LIST=NO,DSECT=YES
+         IHAASCB                       Address Space Control Block
+         IHAASVT                       Address Space Vector Table
+         IHAQEL                        Queued element
+         SPACE 2
+SCVT     DSECT
+         ORG   *+X'84'
+SCVTSVCT DC    V(IBMORG)               ORIGIN OF SVC TABLE
+         SPACE 2
+UCB      DSECT
+         IEFUCBOB LIST=YES
+UCBLTS   EQU   0
+UCBSKA   EQU   0
+         IHASDWA
+         SPACE 2
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11                      Base register
+R12      EQU   12                      2nd base register
+R13      EQU   13                      Address of working storage
+R14      EQU   14
+R15      EQU   15
+         END

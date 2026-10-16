@@ -1,0 +1,132 @@
+//PI#CMP$  JOB CLASS=A,REGION=0K,MSGCLASS=X,MSGLEVEL=(1,1)
+//S1      EXEC GCCCLG,COPTS='-std=c99',
+//             LOPTS='MAP,AMODE=31,RMODE=ANY'
+//COMP.SYSIN DD *,DLM='><'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define LL 10
+
+struct Pi {
+  FILE *fp;
+  int primed;
+  int count;
+  int eof;
+};
+
+int get_digit(struct Pi *p) {
+  if (p->eof) return -1;
+
+  while (1) {
+	   int ch, digit;
+	
+    ch = fgetc(p->fp);
+    if (ch == -1) {
+	     p->eof = 1;
+	     return -1;
+	   }
+
+    digit = ch - '0';
+
+    if (digit >= 0 && digit <= 9) {
+	     if (digit > 0) {
+		      p->primed = 1;
+	     }
+	     if (p->primed) {
+		      p->count++;
+		      return digit;
+	     }
+	   }
+  }
+}
+
+void add_to_string(char* s, int digit) {
+  char ch = '0' + digit;
+  if (strlen(s) >= LL) {
+	   /* shift left */
+	   memmove(s, s+1, strlen(s));
+  }
+  strncat(s, &ch, 1);
+}
+
+int main(void) {
+  struct Pi pi = {0};
+  struct Pi answer = {0};
+
+  char last_pi[LL+1] = "";
+  char last_answer[LL+1] = "";
+
+  char next_pi[LL+1] = "";
+  char next_answer[LL+1] = "";
+
+  int good = 1;
+  int pi_digit, answer_digit, i, extra_digit;
+
+  pi.fp = fopen("dd:pi", "r");
+  answer.fp = fopen("dd:answer", "r");
+
+  while (1) {
+	   answer_digit = get_digit(&answer);
+	   if (answer_digit < 0) {
+ 	    break;
+	   }
+
+	   pi_digit = get_digit(&pi);
+	   if (pi_digit < 0) {
+	     printf("Ran out of pi digits\n");
+	     break;
+	   }
+	
+	   if (answer.count != pi.count) {
+	     printf("We got out of sync!\n");
+	     break;
+	   }
+	
+	   if (pi_digit != answer_digit) {
+	     good = 0;
+	     printf(
+	       "Difference at digit %d: reference %d, answer %d\n",
+	       answer.count, pi_digit, answer_digit
+	     );
+	     break;
+    }
+	   add_to_string(last_answer, answer_digit);
+	   add_to_string(last_pi, pi_digit);
+  }
+
+  if (good) {
+	   printf("answer has %d good digits\n", answer.count);
+  } else {
+	   printf("answer bad at %d digits\n", answer.count);
+	   for (i = 0; i < LL; i++) {
+	     extra_digit = get_digit(&pi);
+	     if (extra_digit >= 0)
+	       add_to_string(next_pi, extra_digit);
+
+	     extra_digit = get_digit(&answer);
+	     if (extra_digit >= 0)
+	       add_to_string(next_answer, extra_digit);
+	   }
+    printf("     pi: ...%s %d %s\n",
+      last_pi, pi_digit, next_pi);
+    printf(" answer: ...%s %d %s\n",
+      last_answer, answer_digit, next_answer);
+  }
+  return good ? 0 : 1;
+}
+><
+//LKED.SYSLMOD DD DISP=SHR,DSN=WEGSCD.LINKLIB(PICOMPR)
+//GO.ANSWER DD DSN=WEGSCD.PI#1M,DISP=(OLD,PASS)
+//GO.PI    DD DSN=WEGSCD.PI#1M,DISP=(OLD,PASS)
+//******
+//XPCTBAD EXEC PGM=PICOMPR
+//STEPLIB   DD DSN=WEGSCD.LINKLIB,DISP=SHR
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//SYSIN     DD DUMMY
+//PI        DD DSN=WEGSCD.PI#1M,DISP=SHR
+//ANSWER    DD *
+3.14159 44444444
+/*
+//

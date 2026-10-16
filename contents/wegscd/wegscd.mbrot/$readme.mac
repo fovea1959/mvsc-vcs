@@ -1,0 +1,6 @@
+Naming scheme
+LLOODD
+
+LL = Language, FH = Fortran H, W5 = Watfiv
+OO = Output. PR = Print, GR = Grey, CL = COlor.
+DD = Datatype. R4 = REAL, R8 = REAL*8, CX = Complex

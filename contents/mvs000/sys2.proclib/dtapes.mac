@@ -1,0 +1,6 @@
+//*-------------------------------------------------------------------*
+//*                  DISPLAY INFORMATION FOR TAPE UNITS               *
+//*-------------------------------------------------------------------*
+//DTAPES  PROC
+//DTAPES  EXEC PGM=DTAPES
+//STEPLIB   DD  DSN=SYS2.CMDLIB,DISP=SHR

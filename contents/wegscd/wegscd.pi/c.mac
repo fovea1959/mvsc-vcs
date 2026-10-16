@@ -1,0 +1,138 @@
+//PIC#@    JOB CLASS=A,REGION=0K,MSGCLASS=X,MSGLEVEL=(1,1)
+//********************************************************************
+//S0      EXEC PGM=IEFBR14
+//PI        DD DSN=WEGSCD.PI#C,DISP=(MOD,DELETE,DELETE),
+//             UNIT=SYSDA,SPACE=(TRK,(0))
+//********************************************************************
+//S1      EXEC GCCCLG,COPTS='-std=c99',
+//             LOPTS='MAP,AMODE=31,RMODE=ANY'
+//COMP.SYSIN DD *,DLM='><'
+#include <stdio.h>
+#include <stdlib.h>
+
+#define LL 80
+#define DIGITS 1000
+#define ARR_LEN ((10 * DIGITS) / 3)
+
+/* Global line buffer to aggregate digits into chunks */
+static char line_buf[LL+1];
+static int buf_idx = 0;
+
+/**
+ * Appends a character to the buffer.
+ * Flushes to stdout as a fixed-length record when LL characters are rea
+ */
+void write_char_vb(char c, FILE *stream) {
+    /*
+    If it's a raw newline from the original code, ignore it.
+    We let our limit dictate the records.
+    */
+    if (c == '\n') {
+        return;
+    }
+
+    line_buf[buf_idx++] = c;
+
+    if (buf_idx >= LL) {
+        /* Print the chunk and append \n to commit the VB record */
+        fprintf(stream, "%.*s\n", LL, line_buf);
+        buf_idx = 0;
+    }
+}
+
+/**
+ * Flushes any remaining characters in the buffer before program exit.
+ */
+void flush_vb_buffer(FILE *stream) {
+    if (buf_idx > 0) {
+        fprintf(stream, "%.*s\n", buf_idx, line_buf);
+        buf_idx = 0;
+    }
+}
+
+int main(void) {
+    int i, j, k;
+    long q, x, nines, predigit;
+    long *a;
+
+    /* Safely allocate memory for the array */
+    a = (long *)malloc((ARR_LEN + 1) * sizeof(long));
+    if (a == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        return 1;
+    }
+
+    /* Initialize all coefficients to 2 */
+    for (j = 1; j <= ARR_LEN; j++) {
+        a[j] = 2;
+    }
+
+    nines = 0;
+    predigit = 0;
+
+    for (j = 1; j <= DIGITS; j++) {
+        q = 0;
+
+        /* Process backwards through the mixed-base representation */
+        for (i = ARR_LEN; i >= 1; i--) {
+            x = 10 * a[i] + q * i;
+            a[i] = x % (2 * i - 1);
+            q = x / (2 * i - 1);
+        }
+
+        /* Correct regularized adjustment for the current digit chunk */
+        a[1] = q % 10;
+        q = q / 10;
+
+        if (q == 9) {
+            nines++;
+        } else if (q == 10) {
+            /* Replace printf characters with write_char_vb tracking */
+            write_char_vb((char)('0' + predigit + 1), stdout);
+            for (k = 0; k < nines; k++) {
+                write_char_vb('0', stdout);
+            }
+            predigit = 0;
+            nines = 0;
+        } else {
+            /* For the very first iteration, j=1 prepares '3' in predigi
+t printing */
+            if (j > 1) {
+                write_char_vb((char)('0' + predigit), stdout);
+                if (j == 2) {
+                    write_char_vb('.', stdout); /* Insert the decimal po
+diately after '3' */
+                }
+            }
+            for (k = 0; k < nines; k++) {
+                write_char_vb('9', stdout);
+            }
+            predigit = q;
+            nines = 0;
+        }
+    }
+
+    /* Flush out the final remaining digit */
+    write_char_vb((char)('0' + predigit), stdout);
+
+    /* Cleanly commit whatever remains in the buffer as the final variab
+d */
+    flush_vb_buffer(stdout);
+
+    free(a);
+    return 0;
+}
+><
+//GO.SYSPRINT DD DSN=&&ANSWER,
+//             DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120),
+//             DISP=(NEW,PASS,DELETE),
+//             SPACE=(TRK,(10,10),RLSE),UNIT=SYSDA
+//********************************************************************
+//S2      EXEC PGM=PICOMPR
+//STEPLIB   DD DSN=WEGSCD.LINKLIB,DISP=SHR
+//PI        DD DISP=SHR,DSN=WEGSCD.PI#1M
+//ANSWER    DD DISP=SHR,DSN=*.S1.GO.SYSPRINT
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//SYSIN     DD DUMMY
+//

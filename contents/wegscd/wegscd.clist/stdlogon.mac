@@ -1,0 +1,8 @@
+        PROC 0
+CONTROL NOMSG,NOLIST,NOSYMLIST,NOCONLIST,NOFLUSH
+WRITE ******************************************-
+*************************************
+WRITE Welcome, &SYSUID
+WRITE ******************************************-
+*************************************
+REVINIT

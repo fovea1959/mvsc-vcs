@@ -1,0 +1,594 @@
+TSTVSALL TITLE 'DYNAMIC ALLOCATION ROUTINE FOR TSTVS'
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Module:        TSTVSALL.                                     *
+*        Author:        Rob Prins, ING-Bank Amsterdam                 *
+*                                                                     *
+*        Function:      Allocate the library used in TSTVS            *
+*                       under ddnames INP01 and OUTP01.               *
+*                       if flag "$RENDS' is on: ask for an old DSNAME *
+*                       and a new DSNAME and rename the specified     *
+*                       dataset                                       *
+*                                                                     *
+*                                                                     *
+*        Parameter:     1 byte allocation switch:                     *
+*                       and 2 bytes routing code passed by            *
+*                       the main routine TSTVS.                       *
+*                                                                     *
+*                                                                     *
+*        Returncodes:   0000 - OK                                     *
+*                       0004 - Function canceled                      *
+*                       0008 - RENAME errors occurred                 *
+*                                                                     *
+*        Modifications: July 29,1993 By Rpr: Support added for the    *
+*                       RENAME command. Both catalogued and not       *
+*                       catalogued datasets can be renamed.           *
+*                                                                     *
+*                       April 06,1995 By Rpr: DYNAMIC=YES added       *
+*                       to UCBLOOK macro                        @950406
+*                       Oct 27,1997   By Rpr: RANGE=ALL   added       *
+*                       to UCBLOOK macro                        @971027
+*                       August 16,2002 By Rpr: Include the MVS38J     *
+*                       version of UCBLOOK (running throught the UCB  *
+*                       lookup table). Use SYSPARM(MVS) to include    *
+*                       This MVS function.                      @020814
+*                       Oct 26,2022 By RPr: add MVSXA version of      *
+*                       UCB LOOK with IOSVSUCB. Use SYSPARM(MVSXA) to *
+*                       include.                                      *
+*                       Change UCBLOOK into UCBSCAN to get rid of     *
+*                       the MODESET in z/OS.
+*                                                                     *
+*-------------------------------------- (C)-2022 SKYBIRD SYSTEMS -----*
+         SPACE 2
+TSTVSALL CSECT
+         SAVE  (14,12),,*              Save registers.
+         LR    R10,R15                 Setup base register
+         USING TSTVSALL,R10            Get addressability
+         LR    R2,R1
+         LA    R1,SAVEAREA
+         ST    R1,8(,R13)              Forward pointer
+         ST    R13,4(,R1)              Backward pointer
+         LR    R13,R1
+         L     R11,0(,R2)              Parameter from TSTVS main
+         USING PARMAREA,R11            Make parameter addressable
+         MVI   SW,0                    Reset switches           @930729
+         XR    R7,R7
+         ICM   R7,3,ROUTCDE            Obtain routing code messages
+         STH   R7,DSNWAIT-4            Store
+         STH   R7,VOLWAIT-4                  into
+         STH   R7,NEWNWAIT-4                      WTOR's        @930729
+         STH   R7,MSG99E-2                              ..
+         TM    ALLOCSW,$UNALL          Unallocate only?
+         BNZ   ALLOC00                 Yes: do not ask new DSName
+ASKDSN   EQU   *
+         NI    SW,255-$NCTLGD          Reset flag               @930729
+         XC    ECB,ECB                 CLear Event Control Block
+         MVC   DALDSN(44),BLANKS       Clear reply area
+         WTOR  'EDT100A Enter dataset name or ''CANCEL''',             *
+               DALDSN,44,ECB,ROUTCDE=(2,3)
+DSNWAIT  WAIT  ECB=ECB                 Wait fore reply
+         CLI   DALDSN,C' '             Nothing replied?
+         BE    ASKDSN                  Yes: ask again
+         CLC   =C'CANCEL',DALDSN       Function canceled ?      @930729
+         BNE   ASKVOL                  No: continue             @930729
+         MVC   MSG99+4(60),MSG05       move msg EDT198I         @930729
+         WTO   MF=(E,MSG99)            Function canceled        @930729
+         LA    R15,4                   Load return code         @930729
+         B     RETURN                  and return               @930729
+ASKVOL   EQU   *                       ASK VOLUME
+         XC    ECB,ECB                 Clear Event Control Block
+         MVC   DAVOLSER,BLANKS         Clear reply area
+         WTOR  'EDT101A Enter volume serial or ''U''',DAVOLSER,6,ECB,  X
+               ROUTCDE=(2,3)
+VOLWAIT  WAIT  ECB=ECB                 Wait for reply
+         CLI   DAVOLSER,C' '           Nothing replied?
+         BE    ASKVOL                  Yes: ask again
+         CLC   DAVOLSER(2),=C'U '      'U', means look in catalog
+         BE    DSNLOC                  Yes: cataloged dataset   @930729
+         OI    SW,$NCTLGD              Mark dataset not catlgd  @930729
+         B     FUNCTION                and branch               @930729
+DSNLOC   DS    0H                                               @930729
+         LOCATE LOC                    Search catalog
+         LTR   R15,R15                 Test completion
+         BZ    VOL1                    Branch if alright
+         MVC   MSG99+4(60),MSG04       Msg: dataset not in catalog
+         WTO   MF=(E,MSG99)            Inform user
+         B     ASKDSN                  Ask for new allocation
+VOL1     DS    0H                      Locate is succesfull
+         MVC   DAVOLSER,LOCVOL         Move volume serial
+FUNCTION DS    0H                      Check if func = ALLOCATE @930729
+*                                      or RENAME                @930729
+         MVC   CURDSN,DALDSN           Save dataset name        @930729
+         TM    ALLOCSW,$RENDS          Rename of a dataset ?    @930729
+         BNO   ALLOC00                 NO; Allocate.            @930729
+         OBTAIN OBTNLIST               Check if DS is on volume @930729
+         LTR   R15,R15                 Test completion          @930729
+         BZ    ASKNEWN                 OK: branch               @930729
+         MVC   MSG99+4(60),MSG03       move msg EDT104E         @930729
+         WTO   MF=(E,MSG99)            Msg: OBTAIN failed       @930729
+         B     ASKDSN                  Retry ...                @930729
+ASKNEWN  DS    0H                      Ask for NEWNAME          @930729
+         XC    ECB,ECB                 Clear ECB                @930729
+         MVC   NEWNAME(44),BLANKS      Clear reply area         @930729
+         WTOR  'EDT106A Enter NEW dataset name or ''CANCEL''',         X
+               NEWNAME,44,ECB,ROUTCDE=(2,3)                     @930729
+NEWNWAIT WAIT  ECB=ECB                 Wair for reply           @930729
+         CLI   NEWNAME,C' '            Nothing replied?         @930729
+         BE    ASKNEWN                 Yes: ask again           @930729
+         CLC   =C'CANCEL',NEWNAME      Function canceled ?      @930729
+         BNE   NEWNC001                No: continue             @930729
+         MVC   MSG99+4(60),MSG05       move msg EDT198I         @930729
+         WTO   MF=(E,MSG99)            Function canceled        @930729
+         LA    R15,4                   Load return code         @930729
+         B     RETURN                  and return               @930729
+NEWNC001 DS    0H                                               @930729
+         TM    SW,$NCTLGD              Dataset catalogued ?     @930729
+         BO    NEWNC005                No: bypass LOCATE        @930729
+         LA    R3,VCB                  Volume list for RENAME   @930729
+         LA    R4,LOC#DEVT             Volume list from LOCATE  @930729
+         LH    R5,LOC#VOLS             # volumes                @930729
+         MVC   VOLCNT,LOC#VOLS         Copy # volumes           @930729
+NEWNC003 DS    0H                                               @930729
+         MVC   0(10,R3),0(R4)          Copy DEVT + volume       @930729
+         XC    10(2,R3),10(R3)         Clear rename status code @930729
+         LA    R3,12(,R3)              next entry output        @930729
+         LA    R4,12(,R4)              next entry input         @930729
+         BCT   R5,NEWNC003             loop until all done      @930729
+         MVC   DALDSN,NEWNAME          move to CAMLST-NAME      @930729
+         LOCATE LOC                    Search catalog           @930729
+         LTR   R15,R15                 DS found in catalog?     @930729
+         BNZ   NEWNC005                No: Ok                   @930729
+         MVC   MSG99+4(60),MSG06       move msg EDT107E         @930729
+         WTO   MF=(E,MSG99)            Newname already catlgd   @930729
+         B     ASKNEWN                 and retry ...            @930729
+NEWNC005 DS    0H                                               @930729
+         MVC   DALDSN,NEWNAME          Move to CAMLST SEARCH    @930729
+         OBTAIN OBTNLIST               Check if DS is on volume @930729
+         LTR   R15,R15                 OBTAIN ok?               @930729
+         BNZ   NEWNC007                No: already on volume    @930729
+         MVC   MSG99+4(60),MSG07       move msg EDT108E         @930729
+         WTO   MF=(E,MSG99)            Newname already on volume@930729
+         B     ASKNEWN                 and retry ...            @941019
+NEWNC007 DS    0H                                               @930729
+         BAL   R14,RENAME              Rename the dataset       @930729
+         B     RETURN
+ALLOC00  EQU   *                       ALLOCATE
+         TM    ALLOCSW,ALLOC           Previous allocation executed?
+         BZ    ALLOC01                 No: skip unallocate
+         BAL   R14,UNALLOC             Unallocate first
+         LTR   R15,R15                 Unalloc ok?
+         BNZ   ASKDSN                  No: try again
+ALLOC01  EQU   *                       Allocate the dataset
+         TM    ALLOCSW,$UNALL          Unallocate only?
+         BNZ   ALLOC99                 Yes: skip allocation routine
+         BAL   R14,ALLOCPRC            Else allocate
+         LTR   R15,R15                 Allocation OK?
+         BNZ   ASKDSN                  No: ask again
+         MVC   MSG99+4(60),MSG01       Msg: allocation succesfull
+         WTO   MF=(E,MSG99)            Inform user
+ALLOC99  DS    0H                                               @930729
+         XR    R15,R15                 Return code 0            @930729
+RETURN   L     R13,4(,R13)
+         RETURN (14,12),RC=(15)        Return to TSTVS main
+         TITLE 'DYNAMIC ALLOCATION ROUTINE'
+*--------------------------------------------------------------------*
+*                                                                    *
+*        This routine dynamically allocates datasets through         *
+*        the DYNALLOC macro <SVC 99>. To do this,it needs the DSNAME *
+*        and the VOLSER. The dataset will be allocated with the      *
+*        DDNAME as specified in 'DALDDN'. A return code will be      *
+*        available in reg. 15 and in an error situation a suitable   *
+*        message will be produced (Refer to MVS Job Management).     *
+*                                                                    *
+*------------------------------------- (C)-2022 Skybird Systems -----*
+         SPACE 2
+ALLOCPRC DS    0H
+         LA    R2,0
+         ST    R14,ALLOCSVE            Save return register
+ALLOC001 EQU   *
+         MVC   DALDDN(8),=C'INP01   '
+         LA    R1,DALPTR               Request block
+         SVC   99                      Allocate <SVC99>
+         LTR   R15,R15                 Allocatin OK?
+         BZ    ALLOC999                Yes: good
+ALLOC003 EQU   *
+         CVD   R15,DWB
+         UNPK  R15BC(4),DWB+4(4)       Return code in message
+         OI    R15BC+3,X'F0'
+         SYCONVHX IN=DAERROR,OUT=ERRORBC,L=2
+         SYCONVHX IN=DAINFO,OUT=INFOBC,L=2
+         MVC   ALLVERB,=C'ALLOCATION'  Prepare message
+         MVC   MSG99+4(60),MSG02       Msg: Allocation failed
+         WTO   MF=(E,MSG99)            Inform user
+         LA    R2,12                   Set return code
+         B     ALLOCERR
+ALLOC999 EQU   *
+         MVC   DALDDN(8),=C'OUTP01  '  DDNAME in text unit
+         LA    R1,DALPTR               Request block
+         SVC   99                      Allocation
+         OBTAIN OBTNLIST
+         LTR   R15,R15                 OBTAIN ok?
+         BZ    ALLOCOK                 Yes: good
+         MVC   MSG99+4(60),MSG03
+         WTO   MF=(E,MSG99)            Msg: OBTAIN failed
+         LA    R2,12                   Set return code
+ALLOCOK  EQU   *
+         OI    ALLOCSW,ALLOC           Mark allcoated
+ALLOCERR L     R14,ALLOCSVE            Return address
+         LR    R15,R2                  Return code
+         BR    R14                     Return
+         TITLE 'DYNAMIC UNALLOCATION ROUTINE'
+*--------------------------------------------------------------------*
+*                                                                    *
+*        THIS ROUTINE DYNAMICALLY UNALLOCATES A DATASET WITH THE     *
+*        DDNAME AS SPECIFIED IN 'DALDDNAM'. THIS FUNCTION WILL ALSO  *
+*        BE PERFORMED THROUGH THE DYNALLOC-MACRO AND A RETURNCODE    *
+*        WILL BE AVAILABLE IN REG. 15.                               *
+*                                                                    *
+*------------------------------------- (C)-2022 Skybird Systems -----*
+         SPACE 2
+UNALLOC  EQU   *
+         ST    R14,UNALLSVE            Save return address
+         LA    R2,0                    Init return code
+UNALL001 EQU   *
+         MVC   DALDDN(8),=C'INP01   '
+         LA    R1,DUNPTR               Unallocation request block
+         SVC   99                      Unallocate
+         LTR   R15,R15                 Ok?
+         BZ    UNALL999                Yes: carry on
+UNALL003 EQU   *
+         CVD   R15,DWB
+         UNPK  R15BC(4),DWB+4(4)       Return code
+         OI    R15BC+3,X'F0'
+         SYCONVHX IN=DUNERROR,OUT=ERRORBC,L=2
+         SYCONVHX IN=DUNINFO,OUT=INFOBC,L=2
+         MVC   ALLVERB(10),=C'UNALLOC.  '
+         MVC   MSG99+4(60),MSG02
+         WTO   MF=(E,MSG02)            Msg: Unallocation failed
+         LA    R2,4                    Return code = 4
+         B     UNALLERR
+UNALL999 EQU   *
+         MVC   DALDDN(8),=C'OUTP01  '  DDNAME in text unit
+         LA    R1,DUNPTR               Load unallocation request blk
+         SVC   99                      Issue DYNALLOC
+         NI    ALLOCSW,X'FF'-ALLOC     Mark unallocated
+UNALLERR L     R14,UNALLSVE            Restore register 14
+         LR    R15,R2                  Return code
+         BR    R14                     Return
+         TITLE 'Rename dataset Routine'
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Routine:    RENAME                                           *
+*        Function:   Rename datasets:                                 *
+*                    If the dataset is cataloged, the dataset will    *
+*                    be renamed, uncataloged and the newname will     *
+*                    be cataloged (msg EDT101A replied with 'U')      *
+*                    If the dataset is not cataloged (msg EDT101A     *
+*                    has been replied with a volume serial number),   *
+*                    only the dataset in the VTOC will be renamed.    *
+*                                                                     *
+*------------------------------------- (C)-2022 Skybird Systems ------*
+         SPACE
+RENAME   DS    0H
+         USING TSTVSUCB,R4             Get addressability of UCB
+         ST    R14,SAVE14R             Save reg.14              @930729
+         TM    SW,$NCTLGD              Dataset cataloged ?      @930729
+         BNO   REN002                  Yes: rename directly     @930729
+         AIF   ('&SYSPARM' NE 'MVS').SKIP1                      @221026
+*---------------------------------------------------------------------*
+*        Do the lookup of the UCB in the MVS way
+*---------------------------------------------------------------------*
+         L     R3,CVTPTR               Get address of CVT       @020814
+         USING CVT,R3                  Provide addressability   @020814
+         L     R2,CVTILK2              Start of Lookup table    @020814
+LOOKUP   DS    0H                      Find UCB                 @020814
+         CLC   0(2,R2),=X'FFFF'        End of lookup table?     @020814
+         BE    LOOKERR                 Yes: scan exhausted      @020814
+         CLC   0(2,R2),=X'0000'        Null entry?              @020814
+         BE    LOOKNXT                 Goto next one            @020814
+         XR    R4,R4                   CLEAR REGISTER           @020814
+         ICM   R4,3,0(R2)              UCB address in R4        @020814
+*        SLL   R4,1                 *2 BECAUSE LOOKUP=HALFWORDS @020814
+         CLC   SRTEVOLI,DAVOLSER    Is this the VOLSER we need? @020814
+         BE    LOOKFND                 Yes: found and Rename    @020814
+LOOKNXT  DS    0H                                               @020814
+         LA    R2,2(,R2)              Next entry in lookup table@020814
+         B     LOOKUP                  Search for next UCB      @020814
+LOOKFND  DS    0H                                               @020814
+         B     REN001                                           @031006
+LOOKERR  DS    0H                                               @020814
+         LA    R15,4                   RC=0004                  @221026
+         DROP  R3                      Kill addr of CVT         @020814
+.SKIP1   ANOP
+         AIF   ('&SYSPARM' NE 'MVSXA').SKIP2                    @221026
+         L     R3,CVTPTR               Get address of CVT       @221026
+         USING CVT,R3                  Provide addressability   @221026
+*---------------------------------------------------------------------*
+*                                                                     *
+*        We are using the MVS/XA operation system.                    *
+*        Use the IOSVSUCB service routine to scan through the UCB's.  *
+*                                                                     *
+*------------------------------------------ (C)-2022 Skybird Systems -*
+         XC    UCBWORK(100),UCBWORK    Clear UCB workarea       @221026
+         MVI   DEVCLASS,UCB3DACC       Search only dasd ucb's   @221026
+         LA    R1,UCBWORK              Pickup address           @221026
+         ST    R1,PARMWA               First parameter          @221026
+         LA    R1,DEVCLASS             Pickup address           @221026
+         ST    R1,PARMWA+4             Second parameter         @221026
+         LA    R1,ADDRUCB              Pickup address 3rd parm  @221026
+         ST    R1,PARMWA+8             Third parameter          @221026
+         OI    PARMWA+8,X'80'          and last parameter       @221026
+LOOKUP   DS    0H                      Find UCB                 @221026
+         LA    R1,PARMWA               3 word parameter list    @221026
+         L     R15,CVTUCBSC            IOSVSUCB routine         @221026
+         BALR  R14,R15                 Invoke IOSVSUCB          @221026
+         LTR   R15,R15                 Search exhausted?        @221026
+         BNZ   LOOKERR                 Yes: UCB not found       @221026
+         L     R4,ADDRUCB              Copy of UCB in R4        @221026
+         CLC   UCBVOLI,DAVOLSER        Is this the request VOL? @221026
+         BNE   LOOKUP                  No: scan again           @221026
+         B     REN001                  Yes: rename dataset      @221026
+LOOKERR  DS    0H                                               @221026
+         LA    R15,4                   Return code 4            @221026
+         DROP  R3                      Kill addr of CVT         @221026
+.SKIP2   ANOP
+         AIF   ('&SYSPARM' EQ 'MVS').SKIP3
+         AIF   ('&SYSPARM' EQ 'MVSXA').SKIP3
+*---------------------------------------------------------------------*
+*        Do the lookup of the UCB in the OS/390 way
+*---------------------------------------------------------------------*
+         XC    UCBWORK(100),UCBWORK    Clear UCB workarea       @221026
+LOOKUP   DS    0H                      Find UCB
+         UCBSCAN COPY,WORKAREA=UCBWORK,UCBAREA=UCBAREA,                X
+               DYNAMIC=YES,DEVCLASS=DASD,RANGE=ALL              @221027
+         LTR   R15,R15                 Last UCB found?          @221027
+         BNZ   LOOKERR                 No: scan exhausted       @221027
+         LA    R4,UCBAREA              Load copy of UCB         @221027
+         CLC   UCBVOLI,VOLSER          Is this the VOLSER we need? 1027
+         BNE   LOOKUP                  No: scan next UCB        @221027
+         B     REN001                                           @221027
+LOOKERR  DS    0H                                               @221027
+         LA    R15,4                   RC=0004                  @221027
+.SKIP3   ANOP
+         CVD   R15,DWB                 Set                      @221926
+         UNPK  MSG11+26(4),DWB            returncode            @930729
+         OI    MSG11+29,X'F0'                in msg             @930729
+         MVC   MSG11+35(6),DAVOLSER    Set VOLSER in msg        @930729
+         MVC   MSG99+4(60),MSG11       move msg EDT111E         @930729
+         WTO   MF=(E,MSG99)            UCBSCAN failed           @221027
+         B     REN970                  and Branch               @930729
+REN001   DS    0H                      ) address UCB in reg4    @930729
+         MVC   VOLCNT,=H'1'            Volume count is 1        @930729
+         MVC   VOLSER,DAVOLSER         Move volume name         @930729
+         MVC   VOLDEVT,UCBTYP          Move device type         @930729
+         DROP  R4                      Kill local addr.         @930729
+REN002   DS    0H                                               @930729
+         SR    R0,R0                   Clear reg.0              @930729
+         RENAME RENAMELS               Rename the dataset       @930729
+         LTR   R15,R15                 Rename OK ?              @930729
+         BZ    REN003                  Yes: continue            @930729
+         CVD   R15,DWB                 Set                      @930729
+         UNPK  MSG08+26(4),DWB            Returncode            @930729
+         OI    MSG08+29,X'F0'                in message         @930729
+         SYCONVHX IN=VOLRNCDE+1,OUT=MSG08+41,L=1 Status code    @930729
+         MVC   MSG99+4(60),MSG08       move msg EDT109E         @930729
+         WTO   MF=(E,MSG99)            Rename failed            @930729
+         B     REN970                  and Branch               @930729
+REN003   DS    0H                                               @930729
+         TM    SW,$NCTLGD              Data set not catalogued  @930729
+         BO    REN900                  YES: finished give msg   @930729
+         CATALOG UNCATLG               Uncatalog the dataset    @930729
+         LTR   R15,R15                 OK ???                   @930729
+         BZ    REN005                  Yeah: branch             @930729
+         MVC   MSG09+8(2),=C'UN'       UNcatalog failed         @930729
+         CVD   R15,DWB                 Set                      @930729
+         UNPK  MSG09+29(4),DWB            Returncode            @930729
+         OI    MSG09+32,X'F0'                in message         @930729
+         MVC   MSG99+4(60),MSG09       move msg EDT110E         @930729
+         WTO   MF=(E,MSG99)            Msg: UNCATLG failed      @930729
+REN005   DS    0H                                               @930729
+         LA    R4,VCB                  Point to volume list     @930729
+         LH    R5,VOLCNT               # volumes                @930729
+REN007   DS    0H                                               @930729
+         XC    10(2,R4),10(R4)         Clear status/dsseqnr     @930729
+         LA    R4,12(,R4)              Next entry               @930729
+         BCT   R5,REN007               Loop until all done      @930729
+         CATALOG CATLG                 Catalog the new dataset  @930729
+         LTR   R15,R15                 OK ???                   @930729
+         BZ    REN900                  Yeah: branch             @930729
+         MVC   MSG09+8(2),=C'  '       CAtalog failed           @930729
+         CVD   R15,DWB                 Set                      @930729
+         UNPK  MSG09+29(4),DWB            Returncode            @930729
+         OI    MSG09+32,X'F0'                in message         @930729
+         MVC   MSG99+4(60),MSG09       move msg EDT110E         @930729
+         WTO   MF=(E,MSG99)            UNCATLG failed           @930729
+         B     REN970                  Give RC=0012             @930729
+REN900   DS    0H                                               @930729
+         MVC   MSG99+4(60),MSG10       move msg EDT199I         @930729
+         WTO   MF=(E,MSG99)            RENAME successful        @930729
+         XR    R15,R15                 RC=0000                  @930729
+         B     REN999                  return                   @930729
+REN970   DS    0H                      errors occurred          @930729
+         LA    R15,8                   Load RC,                 @930729
+REN999   DS    0H                                               @930729
+         L     R14,SAVE14R             Restore reg.14           @930729
+         BR    R14                     Return to caller         @930729
+         TITLE 'Variables and constants'
+DWB      DS    D                       For CVD/CVB instructions @930729
+ADDRUCB  DS    F                       A(UCB) if ds not catlgd  @930729
+ECB      DS    F
+SAVEAREA DC    18F'0'
+MSG01    DC    CL60'EDT103I Allocation of dataset successful'
+MSG02    DS    0CL60
+         DC    CL8'EDT102E '           MSGID 8
+ALLVERB  DS    CL10
+         DC    CL11' Errorcode='       11
+ERRORBC  DS    CL4
+         DC    CL10',INFOCODE='        10
+INFOBC   DS    CL4
+         DC    CL5',R15='              5
+R15BC    DS    CL4
+         DC    CL4' '                  4
+MSG03    DC    CL60'EDT104E Dataset not on volume'
+MSG04    DC    CL60'EDT105E Dataset not in catalog'
+MSG05    DC    CL60'EDT198I Function canceled by operator'      @930729
+MSG06    DC    CL60'EDT107E Newname already catalogued'         @930729
+MSG07    DC    CL60'EDT108E Newname already on volume'          @930729
+MSG08    DC    CL60'EDT109E RENAME failed, RC=xxxx, Statuscd=xx' @93729
+MSG09    DC    CL60'EDT110E xxCATALOG failed, RC=xxxx'          @930729
+MSG10    DC    CL60'EDT199I RENAME of dataset successful'       @930729
+MSG11    DC    CL60'EDT111E UCBSCAN failed RC=xxxx,VOL=vvvvvv'  @221027
+BLANKS   DC    CL60' '
+MSG99    WTO   '1234512345123451234512345123451234512345123451234512345X
+               12345',ROUTCDE=(2,3),MF=L
+MSG99E   EQU   *
+*
+LOC      CAMLST NAME,DALDSN,,LOCAREA   FOR LOCATE
+OBTNLIST CAMLST SEARCH,DALDSN,DAVOLSER,WORKAREA
+RENAMELS CAMLST RENAME,CURDSN,NEWNAME,VOLLIST                   @930729
+CATLG    CAMLST CATBX,NEWNAME,,VOLLIST                          @930729
+UNCATLG  CAMLST UCATDX,CURDSN                                   @930729
+*
+LOCAREA  DS    0D
+LOC#VOLS DS    CL2                     # volume on which ds resides
+LOC#DEVT DS    CL4                     devtype                  @930729
+LOCVOL   DS    CL6                     Found volume
+LOCDSEQ  DS    CL2                     Dataset seq. number      @930729
+         DS    CL251                   Rest of LOCAREA
+*
+         DS    0D
+WORKAREA DS    CL140
+CURDSN   DS    CL44                    Old dataset if RENAME    @930729
+NEWNAME  DS    CL44                    New dataset if RENAME    @930729
+*
+         DS    0H                      volume list on hw-bound. @930729
+VOLLIST  DS    0CL256                  Volume list for RENAME   @930729
+VOLCNT   DS    CL2                     # volumes                @930729
+VCB      DS    0CL12                   1 volume entry           @930729
+VOLDEVT  DS    CL4                     Device-type              @930729
+VOLSER   DS    CL6                     Volume serial number     @930729
+VOLRNCDE DS    CL2                     Rename code              @930729
+         DS    CL242                   Rest of volume list      @930729
+*                                                               @930729
+SW       DC    X'00'                                            @930729
+$NCTLGD  EQU   128                                              @930729
+         LTORG ,
+         TITLE 'ALLOCATION CONTROL-BOCKS'
+*--------------------------------------------------------------------*
+*                                                                    *
+*        These are the control-blocks used by the dynamic allocation *
+*        routine and the DASDSM Rename routine.                      *
+*                                                                    *
+*------------------------------------- (C)-2022 Skybird Systems -----*
+         SPACE 2
+         DS    0F
+DALPTR   DC    X'80',AL3(DALBLK)
+*
+DALBLK   DC    AL1(20)                 Length of request block
+DALVERB  DC    AL1(1)                  1 = DSName allocation
+DALFLG1  DC    X'2000'                 Flags1
+DAERROR  DC    AL2(0)                  Error code
+DAINFO   DC    AL2(0)                  Info code
+DALTU    DC    A(DALTXT)               Address of text unit list
+         DC    A(0)                    Reserved
+DALFLG2  DC    A(0)                    Flags2
+*
+DALTXT   DS    0F
+         DC    A(DALDDNAM)             DDNAME text unit
+         DC    A(DALDSNAM)             DSNAME text unit
+         DC    A(DALSTATS)             Disposition text unit
+         DC    A(DALVLSER)             Volume Serial Text unit
+         DC    X'80',AL3(DALUNIT)      Unit name contains SYSDA
+*
+DALDSNAM DS    0H                      DSNAME Text Unit
+         DC    X'0002'
+         DC    AL2(1)
+DALDSNL  DC    AL2(44)                 Length
+DALDSN   DS    CL44                    Data set name
+*
+DALSTATS DS    0H                      Data set disposition
+         DC    X'0004'
+         DC    AL2(1)
+         DC    AL2(1)                  Length
+         DC    X'08'                   DISP=SHR
+*
+DALVLSER DS    0H                      Volume serial text unit
+         DC    X'0010'                 10 = volser text unit
+         DC    AL2(1)
+         DC    AL2(6)                  Volume length
+DAVOLSER DS    CL6
+*
+DALUNIT  DS    0H                      UNIT Text unit
+         DC    X'0015'
+         DC    AL2(1)
+DALUNITL DC    AL2(8)                  Length
+DALUNITD DC    C'SYSALLDA'
+*
+DALDDNAM DS    0H                      DDNAME text unit
+         DC    X'0001'
+         DC    AL2(1)
+DALDDNL  DC    AL2(8)                  Length of DDNAME
+DALDDN   DS    0CL8                    DDNAME
+         DC    CL8'INP01'
+         TITLE 'UNALLOCATION CONTROL-BLOCKS'
+*--------------------------------------------------------------------*
+*                                                                    *
+*        These are the control-blocks used by the dynamic Unallo-    *
+*        cation routine.                                             *
+*                                                                    *
+*------------------------------------- (C)-2022 Skybird Systems -----*
+         SPACE 2
+         DS    0F
+DUNPTR   DC    X'80',AL3(DUNBLK)       Request block pointer
+*
+DUNBLK   DC    AL1(20)                 Length of request block
+DUNVERB  DC    AL1(2)                  2 = Unallocation
+DUNFLG1  DC    X'2000'                 Flags1
+DUNERROR DC    AL2(0)                  Error code
+DUNINFO  DC    AL2(0)                  Info code
+         DC    A(DUNTXT)               Address of text unit list
+         DC    A(0)                    Reserved
+DUNFLG2  DC    A(0)                    Flags2
+*
+DUNTXT   DS    0F
+         DC    X'80',AL3(DALDDNAM)
+*
+UCBWORK  DS    13D                     Workarea for IOSVSUCB    @221026
+PARMWA   DS    3F                      Parm for IOSVSUCB        @221026
+SAVE14R  DS    F                       SAVE R14 In Rename rout. @930729
+ALLOCSVE DS    F                       SAVE R14
+UNALLSVE DS    F
+DEVCLASS DS    X                       Device class to look     @221026
+UCBAREA  DS    CL48                    Copy of UCB (UCBSCAN)    @221027
+*
+*        GENERAL EQUATES.
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10                      First base register
+R11      EQU   11                      Address of Parameter from TSTVS
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+*
+         TITLE 'Dummy sections'
+         PRINT NOGEN
+PARMAREA DSECT                         Parameter from TSTVS main
+ALLOCSW  DS   C                        Switch from TSTVS main
+ALLOC    EQU  X'80'                    Perform an allocation
+$UNALL   EQU  X'08'                    Do only an unallocate
+$RENDS   EQU  X'02'                    Perform a RENAME         @930729
+ROUTCDE  DS   CL2                      Routing code messages
+*
+TSTVSUCB DSECT ,                                                @930729
+         IEFUCBOB LIST=NO
+         CVT   DSECT=YES,LIST=NO
+         END

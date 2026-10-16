@@ -1,0 +1,30 @@
+//C#B99    JOB CLASS=A,REGION=0K,MSGCLASS=X,MSGLEVEL=(1,1)
+//*
+//* This is an example of how to compile using the
+//* proc. If your installation has not installed the
+//* proc, you will need to execute the compiler
+//* directly, using the other example.
+//*
+//S1 EXEC GCCCLG,
+//  LOPTS='MAP,AMODE=31,RMODE=ANY'
+//COMP.SYSIN DD *,DLM='><'
+#include <stdio.h>
+
+int main(int argc, char **argv)
+{
+    int b = 99;
+    while (b > 1) {
+        printf("%d bottles of beer on the wall,\n", b);
+        printf("%d bottles of beer!\n", b);
+        printf("Take one down, pass it around,\n");
+        b--;
+        printf("%d bottles of beer on the wall!\n\n", b);
+    }
+    printf("1 bottle of beer on the wall,\n");
+    printf("1 bottle of beer!\n");
+    printf("Take one down, pass it around,\n");
+    printf("No more bottles of beer on the wall!\n\n");
+    return (0);
+}
+><
+//

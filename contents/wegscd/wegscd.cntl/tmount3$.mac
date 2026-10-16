@@ -1,0 +1,192 @@
+//TMOUNTAS JOB (TSO),'COMPILE TMOUNT',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1)
+//*-------------------------------------------------------------------*
+//* STEP 1: ASSEMBLE THE SOURCE USING IFOX00                          *
+//*-------------------------------------------------------------------*
+//ASM      EXEC PGM=IFOX00,PARM='OBJ,NODECK',REGION=2048K
+//SYSLIB   DD DSN=SYS1.MACLIB,DISP=SHR
+//SYSUT1   DD UNIT=SYSDA,SPACE=(CYL,(5,5))
+//SYSUT2   DD UNIT=SYSDA,SPACE=(CYL,(5,5))
+//SYSUT3   DD UNIT=SYSDA,SPACE=(CYL,(5,5))
+//SYSPRINT DD SYSOUT=*
+//SYSGO    DD DSN=&&OBJSET,DISP=(MOD,PASS),UNIT=SYSDA,
+//            SPACE=(CYL,(1,1)),DCB=(RECFM=FB,LRECL=80,BLKSIZE=400)
+//SYSIN    DD *
+TMOUNT   CSECT
+* --- STANDARD OS/360 SAVE AREA LINKAGE (IFOX00 COMPATIBLE) ---
+         STM   14,12,12(13)        SAVE CALLER'S REGISTERS
+         BALR  12,0                ESTABLISH PROGRAM ADDRESSABILITY
+         USING *,12
+         ST    13,SAVEAREA+4       FORWARD CHAIN
+         LA    11,SAVEAREA
+         ST    11,8(,13)           BACKWARD CHAIN
+         LR    13,11               POINT TO OUR SAVE AREA
+*
+* --- STEP 1: PARSE PARM (EXPECTS 'ADDRESS,FILENAME') ---
+*
+         L     2,0(,1)             REG 2 = ADDR OF PARM POINTER
+         LH    3,0(,2)             REG 3 = HALFWORD LENGTH OF PARM
+         LTR   3,3                 ANY PARM PASSED?
+         BC    8,PARMERR           BC 8 = BZ (BRANCH ON ZERO) -> ERROR
+*
+         LA    4,2(,2)             REG 4 = START OF PARM STRING DATA
+         LA    5,DEVADDR           REG 5 = DESTINATION FOR DDNAME
+         XR    6,6                 REG 6 = COUNTER FOR DDNAME LENGTH
+*
+PARSEDD  CLI   0(4),C','           DID WE HIT THE COMMA SEPARATOR?
+         BC    8,FNDCOMMA          BC 8 = BE (BRANCH EQUAL) -> FOUND
+         MVC   0(1,5),0(4)         MOVE ONE CHARACTER OF DDNAME
+         LA    4,1(,4)             BUMP PARM POINTER
+         LA    5,1(,5)             BUMP DDNAME POINTER
+         LA    6,1(,6)             BUMP DDNAME LENGTH COUNTER
+         CH    6,=H'8'             DID DDNAME EXCEED MAX 8 CHARS?
+         BC    2,PARMERR           BC 2 = BH (BRANCH HIGH) -> ERROR
+         BCT   3,PARSEDD           DECREMENT TOTAL PARM LENGTH AND LOOP
+         B     PARMERR             IF PARM ENDED WITHOUT COMMA, ERROR!
+*
+FNDCOMMA BCT   3,SETUPFN           DECREMENT TOTAL PARM LENGTH FOR CMD
+         B     PARMERR             IF COMMA WAS LAST CHARACTER, ERROR!
+*
+SETUPFN  LA    4,1(,4)             BUMP PARM POINTER PAST COMMA
+         LA    5,FILENAME          REG 5 = DESTINATION FOR HOST PATH
+         MVC   FILENAME,BLANKS     CLEAR FILENAME BUFFER WITH BLANKS
+         STH   3,CCW1#LN           DYNAMICALLY UPDATE CCW PAYLOAD LEN
+*
+PARSEFN  MVC   0(1,5),0(4)         MOVE ONE CHARACTER OF HOST FILE PATH
+         LA    4,1(,4)             BUMP PARM POINTER
+         LA    5,1(,5)             BUMP FILENAME POINTER
+         BCT   3,PARSEFN           LOOP UNTIL PARM IS EXHAUSTED
+* --- STEP 1B: EXECUTE DYNAMIC ALLOCATION (SVC 99)
+         LA    1,RBPTR
+         SVC   99
+         LTR   15,15
+         BC    7,SVC99ERR          BC 7 = BNZ -> ROUTINE FAILED
+*
+* --- STEP 2: OPEN THE TARGET DEVICE ---
+*
+         MVC   TAPE#DCB+40(8),DEVADDR  OVERWRITE DDNAME IN DCB (@40)
+         OPEN  (TAPE#DCB,(OUTPUT))
+         TM    TAPE#DCB+48,X'10'   DID THE DCB OPEN SUCCESSFULLY?
+         BC    14,OPENERR          BC 14 = BNO (BRANCH NOT ONE) -> ERR
+*
+* --- STEP 3: PREPARE AND EXECUTE THE HERCULES CCW ---
+*
+         LA    4,FILENAME          GET ADDRESS OF HOST FILE PATH STRING
+         ST    4,CCW1#AD           STORE ADDRESS INTO THE CCW
+*
+         EXCP  MY#IOB              EXECUTE CHANNEL PROGRAM VIA EXCP
+         WAIT  ECB=MY#ECB          WAIT FOR HERCULES TO MOUNT
+*
+* --- STEP 4: CHECK FOR I/O SUCCESS ---
+*
+         CLI   MY#ECB,X'7F'        X'7F' = SUCCESSFUL COMPLETION
+         BC    7,IOERR             BC 7 = BNE (BRANCH NOT EQUAL) -> ERR
+*
+* --- STEP 5: CLEAN UP AND RETURN ---
+*
+         CLOSE (TAPE#DCB)
+         L     13,4(,13)           RESTORE OLD SAVE AREA
+         LM    14,12,12(13)        RESTORE CALLER'S REGISTERS
+         XR    15,15               RETURN CODE 0
+         BR    14                  RETURN TO MVS
+*
+* --- ERROR HANDLERS ---
+*
+PARMERR  L     13,4(,13)
+         LM    14,12,12(13)
+         LA    15,12               RC=12: MISSING OR MALFORMED PARM
+         BR    14
+*
+OPENERR  L     13,4(,13)
+         LM    14,12,12(13)
+         LA    15,8                RC=8: OPEN FAILED / DD MISSING
+         BR    14
+*
+IOERR    CLOSE (TAPE#DCB)
+         L     13,4(,13)
+         LM    14,12,12(13)
+         LA    15,4                RC=4: HERCULES CCW REJECTED
+         BR    14
+*
+SVC99ERR L     13,4(,13)
+         LM    14,12,12(13)
+         LA    15,16               RC=16: DYNMIC ALLOC FAILED
+         BR    14
+
+*
+* --- DATA AREA / CONTROL BLOCKS (STRICT IFOX00 COMPLIANT LABELS) ---
+*
+SAVEAREA DC    18F'0'              OS/360 SAVE AREA
+DEVADDR  DC    CL8' '              EXTRACTED DDNAME STORAGE
+FILENAME DC    CL64' '             EXTRACTED HOST FILE PATH STORAGE
+BLANKS   DC    CL64' '             BLANK PADDING BUFFER
+*
+         DS    0D                  ALIGN TO DOUBLEWORD
+MY#ECB   DC    F'0'                EVENT CONTROL BLOCK
+*
+MY#IOB   DS    0F                  INPUT/OUTPUT BLOCK
+         DC    X'02'               IOB FLAGS
+         DC    X'00'               IOB SENSE BYTE
+         DC    A(MY#ECB)           POINTER TO ECB
+         DC    2A(0)               IOB STATUS BYTES
+         DC    A(MY#CCW)           POINTER TO CHANNEL PROGRAM (CCW)
+         DC    A(TAPE#DCB)         POINTER TO DCB
+         DC    2A(0)               RESERVED
+*
+         DS    0D                  ALIGN TO DOUBLEWORD
+MY#CCW   DS    0D
+CCW1#OP  DC    X'4B'               OPCODE (HERCULES SET DIAGNOSE)
+CCW1#AD  DC    A(FILENAME)         DATA ADDRESS
+CCW1#FL  DC    X'20'               CCW FLAGS (SLI)
+CCW1#LN  DC    H'0'                DYNAMICALLY FILLED DURING PARSING
+*
+TAPE#DCB DCB   DSORG=PS,MACRF=(E),DDNAME=DUMMYDD
+*
+         DS    0F
+RBPTR    DC    X'80'
+         DC    AL3(S99RB)
+*
+S99RB    DS    0F
+S99RBLN  DC    AL1(20)             LEN OF RB
+S99VERB  DC    AL1(1)              VERB CODE: 1 = TYPE 1 ALLOCATION
+S99FLAG1 DC    XL2'4000'           FLAGS: DO NOT MOUNT/WAIT IF NOT AVA
+S99ERROR DC    XL2'0000'           ERROR CODE FROM MVS
+S99INFO  DC    XL2'0000'           INFO CODE FROM MVS
+S99TXTPP DC    A(TUPTRS)
+S99SERS  DC    F'0'
+S99FLAG2 DC    F'0'
+*
+         DS    0F
+TUPTRS   DC    A(TUDDNAM)
+         DC    A(TUTYPE)
+         DC    X'80'
+         DC    AL3(TUDISP)
+*
+         DS    0H
+TUDDNAM  DC    XL2'0001'           KEY FOR DDNAME
+         DC    XL2'0001'           # OF PARMS
+         DC    XL2'0008'           LEN OF PARM
+         DC    CL8'HERCTAPE'       DDNAME
+*
+TUTYPE   DC    XL2'0015'           KEY FOR UNIT TYPE
+         DC    XL2'0001'           # OF PARMS
+         DC    XL2'0004'           LENGTH OF PARM
+         DC    CL4'TAPE'           WISH WE COULD SAY 3420
+*
+TUDISP   DC    XL2'0004'           KEY FOR DISP
+         DC    XL2'0001'           # OF PARMS
+         DC    XL2'0001'           LENGTH OF PARM
+         DC    XL1'01'             X'01' = SHARE / OLD
+         END   TMOUNT
+/*
+//*-------------------------------------------------------------------*
+//* STEP 2: LINK-EDIT THE OBJECT MODULE INTO AN AUTHORIZED LIBRARY    *
+//*-------------------------------------------------------------------*
+//LKED     EXEC PGM=IEWL,PARM='XREF,LET,LIST,AC=1',REGION=1024K
+//SYSLIN   DD DSN=&&OBJSET,DISP=(OLD,DELETE)
+//         DD DDNAME=SYSIN
+//SYSUT1   DD UNIT=SYSDA,SPACE=(CYL,(1,1))
+//SYSPRINT DD SYSOUT=*
+//SYSLMOD  DD DSN=SYS2.LINKLIB,DISP=SHR
+//SYSIN    DD *
+  NAME TMOUNT(R)
+/*

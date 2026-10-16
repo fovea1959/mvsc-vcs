@@ -1,0 +1,375 @@
+TSOEXEC  TITLE 'Run authorized TSO commands in a non-authorized environ*
+               ment'
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Module:      TSOEXEC                                         *
+*                                                                     *
+*        Author:      Rob Prins                                       *
+*                                                                     *
+*        Attributes:  RENT, REUS, REFR.                               *
+*                                                                     *
+*        Syntax:      TSOEXEC command operands                        *
+*                     example: TSOEXEC LISTDS 'dataset' MEMBERS       *
+*                                                                     *
+*        Function:                                                    *
+*        Check if the jobstep is APF authorized.                      *
+*        If the jobstep is APF authorized (JSCBAUTH is on):           *
+*        ATTACH the TSO command processor in the TSOEXEC command      *
+*        immediately.                                                 *
+*                                                                     *
+*        If the jobstep is not APF authorized (JSCBAUTH is off):      *
+*        If the TSO command does not have AC=1 in the directory,      *
+*        ATTACH the TSO command processor immediately too.            *
+*                                                                     *
+*        If the jobstep is not APF and the TSO command does have      *
+*        AC=1 on, call SVC 244 to set the jobstep APF bit (JSCBAUTH), *
+*        ATTACH the TSO command processor and call SVC 244 to reset   *
+*        the APF bit (JSCBAUTH).                                      *
+*                                                                     *
+*        Note:        Include SYS1.(A)MODGEN in SYSLIB of assembly    *
+*                                                                     *
+*        Change log:                                                  *
+*        20240131: RPr: initial version.                              *
+*        20260113: RPr: propagate return code command processor.      *
+*                                                                     *
+*------------------------------------------ (C)-2026 Skybird Systems -*
+TSOEXEC  CSECT
+         SAVE  (14,12),,*
+         LR    R12,R15                 Setup base register
+         USING TSOEXEC,R12             Provide addressability
+         LR    R6,R1                   Save CPPL address
+         GETMAIN R,LV=WORKL            Obtain dynamic workarea
+         ST    R13,4(,R1)              Backward pointer
+         ST    R1,8(,R13)              Forward pointer
+         LR    R13,R1                  Use our save area
+         USING WORKAREA,R13            Get addressability workarea
+         XC    RC,RC                   Initially clear return code
+         B     START
+SYSDATE  DC    CL8'&SYSDATE',C' ',CL8'&SYSTIME'
+START    DS    0H
+         STM   R9,R14,SAVESTAI         Save the registers for abend
+         MVI   CMD,C' '                Blank out ...
+         MVC   CMD+1(255),CMD          ... command buffer
+         MVC   COMMAND,CMD             Blank command name
+         XC    CMDOFFS,CMDOFFS         Default offset to 1st operand
+         MVI   FLGS,0
+         MVC   MYCPPL(16),0(R6)        Copy contents of CPPL
+*
+*        Remove TSOEXEC from the command buffer and update
+*        the length.
+*
+         LA    R6,MYCPPL               New CPPL
+         USING CPPL,R6                 Make it addressable
+         L     R3,CPPLCBUF             Command buffer
+         LH    R5,0(,R3)               Length of TSOEXEC command
+         LA    R3,4(,R3)               Point to command itsself
+         SH    R5,=H'4'                Minus header
+         XR    R2,R2                   Counter of bytes
+TSTCMD1  DS    0H
+         CLI   0(R3),C' '              Blank found?
+         BE    TSTCMD3
+         LA    R3,1(R3)                Next byte of command
+         LA    R2,1(R2)                Count it
+         BCT   R5,TSTCMD1              Loop until blank found
+         B     RETURN                  Exit if no blank found
+TSTCMD3  DS    0H
+         CLI   0(R3),C' '              Blank found?
+         BNE   TSTCMD5                 No: we are at the 1st operand
+         LA    R3,1(R3)                Next byte of command
+         LA    R2,1(R2)                Count it
+         BCT   R5,TSTCMD3              Loop until blank found
+         B     RETURN                  Exit if only blanks
+TSTCMD5  DS    0H
+         L     R5,CPPLCBUF             Point to command buffer
+         LH    R5,0(,R5)               Point to length in cmdbuff
+         SLR   R5,R2                   Minus TSOEXEC + 1 or more blanks
+         LR    R1,R5                   Copy
+         STH   R5,CMDL                 New length
+         BCTR  R1,0                    Minus 1 for EX
+         SH    R1,=H'4'                Minus header
+         EX    R1,MVECMD               Move command -/- TSOEXEC
+         LR    R5,R1                   Copy length
+         EX    R5,TRTNCMD              Find first blank
+         BZ    TSTCMD8                 Not found, CMDOFFS=CMDL-4
+         LR    R4,R1                   Point to first blank in cmd
+         LA    R3,CMD                  Point to new command
+         SLR   R1,R3                   Offset to first blank
+TSTCMD7  DS    0H
+         CLI   0(R4),C' '              Look for first nonblank
+         BNE   TSTCMD9                 Yes: found.
+         LA    R4,1(,R4)               Next byte in new command
+         LA    R1,1(,R1)               Count it
+         BCT   R5,TSTCMD7              Loop
+TSTCMD8  DS    0H
+         LH    R1,CMDL                 Length of command incl CMDL
+         SH    R1,=H'4'                Offset is L' command name
+TSTCMD9  DS    0H
+         STH   R1,CMDOFFS              New offset to 1st operand
+BLDL     DS    0H
+         LA    R1,TSOCMD               New command
+         ST    R1,CPPLCBUF             New command buffer address
+*
+*        Test if the TSO command is installed
+*
+         LA    R1,CMD                  Command in command buffer
+         LA    R2,8                    Test max. 8 times
+         LA    R3,COMMAND              Output
+BLDL01   DS    0H
+         CLI   0(R1),C' '              Blank found?
+         BE    BLDL03                  Yes: command complete
+         MVC   0(1,R3),0(R1)           Move 1 character command
+         OI    0(R3),X'40'             XLATE to upper
+         LA    R1,1(,R1)               Next position input
+         LA    R3,1(,R3)               Next position output
+         BCT   R2,BLDL01               Loop until all done
+BLDL03   DS    0H
+         L     R1,CPPLECT
+         USING ECT,R1
+         MVC   ECTPCMD,COMMAND         Command name in ECT
+         MVC   BLDLNAME,COMMAND        Command name in BLDL list
+         DROP  R1,R6                   ECT and CPPL
+         MVC   BLDLLIST(4),=X'0001004C'  Retrieve 1 member of 76 bytes
+         BLDL  0,BLDLLIST              Try to find TSO command
+         LTR   R15,R15                 Command found?
+         BNZ   NTFND                   No: issue error message
+         LA    R9,BLDLNAME             Point to found directory entry
+         USING PDS2,R9                 Provide addressability
+*
+*        Test if Jobstep (TSO) is APF authorized
+*        If APF authorized, attach the command processor immediately
+*
+         USING PSA,R0
+         L     R1,PSATOLD              Point to current TCB
+         USING TCB,R1
+         ICM   R1,7,TCBJSTCA           Point to jobstep TCB
+         ICM   R1,7,TCBJSCBB           Point to JSCB
+         DROP  R0,R1                   PSA and TCB
+         USING IEZJSCB,R1
+         TM    JSCBOPTS,JSCBAUTH       Are we APF authorized?
+         BNZ   ATCHCMD                 Yes: invoke TSO cmd directly
+         DROP  R1                      JSCB
+*
+*        Test if the AC bit in the directory entry of the TSO
+*        command processor is set.
+*        If the AC bit is set and the environment is non-APF,
+*        make the environment APF authorized.
+*
+         TM    PDS2FTB1,PDSAPFLG       Is info in PDSAPF valid?
+         BNO   ATCHCMD                 No: attach processor immed.
+         LA    R6,PDSBCLN(,R9)         Point after basic section
+         TM    PDS2ATR1,PDS2SCTR       Is there a SCATTER section?
+         BNO   *+8                     no: branch
+         LA    R6,PDSS01LN(,R6)        Point after scatter section
+         TM    PDS2INDC,PDS2ALIS       Is there an ALIAS  section?
+         BNO   *+8                     no: branch
+         LA    R6,PDSS02LN(,R6)        Point after alias section
+         TM    PDS2FTB1,PDS2SSI        Is there an SSI    section?
+         BNO   NOSSI                   no: branch
+         LA    R6,1(,R6)               + 1 because SSI section
+         SRL   R6,1                    is on halfword
+         SLL   R6,1                    boundary
+         LA    R6,PDSS03LN(,R6)        Length of SSI section
+NOSSI    DS    0H
+         DROP  R9                      PDS2 (IHAPDS)
+         TM    1(R6),X'01'             AC=1?
+         BNO   ATCHCMD                 No: attach immediately
+*
+*        Test if the Magic SVC (SVC244) is present
+*
+         LA    R0,MAGIC                SVC number magic SVC
+         CVD   R0,DBW                  Make packed
+         UNPK  DBW2,DBW                Make zoned w/o changing sign
+         MVC   DBW2(3),=C'IGC'         SVC module start
+         LM    R0,R1,DBW2              Set module name in r0-r1 pair
+         STM   R14,R12,12(R13)         Save our registers
+         L     R3,CVTPTR(,0)           CVT
+         L     R15,CVTLPDSR-CVT(,R3)   Address of IEAVVMSR
+         CALL  (15)                    Find IGC002xx in SVC table
+         B     SVCEXEC                 BR 14+0 is found
+         LM    R14,R12,12(R13)         BR 14+4 is not found
+         B     ATCHCMD                 No magic SVC found
+*                                      Attach CP directly
+*        Set the APF bit with the magic SVC
+*
+SVCEXEC  LM    R14,R12,12(R13)         Restore registers SVC found
+         LA    R1,1                    R1=1 = set APF
+         SR    R0,R0                   R0 should be zero
+         SVC   MAGIC                   Become APF authorized
+         OI    FLGS,$APFSET            Flag APF set by magic SVC
+         USING PSA,R0                  Prefixed storage area
+         L     R1,PSATOLD              Point to current TCB
+         L     R1,TCBJSCB-TCB(,R1)     Point to JSCB
+         USING IEZJSCB,R1
+         TM    JSCBOPTS,JSCBAUTH       Are we APF authorized now?
+         BNZ   ATCHCMD                 Yes: good, attach TSO CP
+         NI    FLGS,255-$APFSET        Reset APF flag
+ATCHCMD  DS    0H
+*
+*        ATTACH the TSO command processor.
+*
+         LA    R2,COMMAND              Point to processor name
+         LA    R1,MYCPPL               Load CPPL-address into reg. 1
+         XC    ATCHLST(ALSTLEN),ATCHLST Clear Subfield ATTACH
+         LA    R15,ATCHLST             SF field
+         XC    ECB,ECB                 Clear Event Control Block
+         LA    R4,ECB                  ECB address
+         LA    R3,SAVESTAI             ECB address
+         XC    PROCTCB,PROCTCB         Clear TCB address
+         ATTACH EPLOC=(2),ECB=(4),ESTAI=(TSOSTAI,(3)),                 *
+               SF=(E,(15))
+         ST    R1,PROCTCB              Save TCB-address
+         WAIT  ECB=ECB                 Wait for completion
+         MVC   RC,ECB                  Post bit + return code
+         MVI   RC,0                    Clear first byte
+         ICM   R2,15,PROCTCB           Point to TCB address if present
+         BZ    RSTAPF                  No
+         DETACH PROCTCB                Get rid of subtask
+RSTAPF   DS    0H
+         TM    FLGS,$APFSET            Flag APF set by magic SVC
+         BNO   RETURN                  No: return
+*
+*        Reset the APF bit with the magic SVC
+*
+         LA    R1,0                    R1=0 = reset APF
+         SR    R0,R0                   R0 should be zero
+         SVC   MAGIC                   Become APF unauthorized
+         NI    FLGS,255-$APFSET        Reset APF flag
+         B     RETURN                  Exit.
+         TITLE 'Issue Command not found message'
+NTFND    DS    0H
+         MVC   MSGTXT,MSG01            Move message to dynamic area
+         MVC   MSGTXT+17(8),COMMAND    TSO command not found
+         LA    R1,MSGTXT               Area address
+         LA    R0,50                   Length
+         TPUT  (1),(0),R               Issue abend message
+         MVC   RC,=F'4'                Return code
+         TITLE 'Return to TSO TMP'
+RETURN   DS    0H
+         LR    R2,R13                  Our working storage to free
+         L     R3,RC                   Return code command processor
+         L     R13,4(,R13)             Caller save area
+         FREEMAIN R,LV=WORKL,A=(2)
+         LR    R15,R3                  Restore return code
+         RETURN (14,12),RC=(15)        Return to TSO cmp
+MVECMD   MVC   CMD(0),0(R3)            << executed >>
+TRTNCMD  TRT   CMD(0),STOPSPCE         << executed >>
+         TITLE 'Cleanup if the attached TSO command abends'
+*--------------------------------------------------------------------*
+*                                                                    *
+*        Routine:      TSOSTAI                                       *
+*                                                                    *
+*        Function:     Cleanup after abend of the subtask issuing    *
+*                      the TSO command (first operand of TSOEXEC).   *
+*                                                                    *
+*----------------------------------------- (C)-2026 Skybird systems -*
+TSOSTAI  DS    0H
+         DROP  ,
+         USING *,15
+         CH    R0,=H'12'               Any SDWA provided?
+         BNE   STAI010                 Yes: good
+         SLR   R15,R15                 Continue with abend (percolate)
+         BR    R14                     Exit
+STAI010  DS    0H
+         STM   R14,R12,12(R13)         Save registers
+         LR    R5,R1                   Save SDWA pointer
+         USING SDWA,R5                 Else retry
+         XR    R2,R2                   Clear register 2
+         ICM   R2,7,SDWACMPC           Insert completion code
+         SRL   R2,12                   Shift out user completion code
+         ST    R2,SDWASR02             Save register 2 for retry rout
+STAI015  LR    R1,R5                   Restore SDWA pointer
+         L     R3,SDWAPARM             PARM with registers 9-14
+         MVC   SDWASR09(24),0(R3)      Restore registers 9-14
+         SETRP RC=4,                   Indicate retry                  *
+               RETADDR=STAIRET,        Retry-address                   *
+               RETREGS=YES,            Restore registers for retry ..  *
+               REGS=(14,12),           Restore registers               *
+               FRESDWA=YES,            And free thr SDWA               *
+               COMPCOD=(0,USER)        Completion code
+         DROP  R5,R15                  SDWA and TSOSTAI
+STAIRET  DS    0H                      Retry routine
+         USING TSOEXEC,R12             Make module addressable again
+         USING WORKAREA,R13            Our working storage
+         STH   R2,SYSTEMCC             Save system completion code
+         UNPK  DBW(5),SYSTEMCC(3)      Expand each byte
+         NC    DBW(4),=X'0F0F0F0F'     Clear hi order nibbles
+         TR    DBW(4),=C'0123456789ABCDEF'
+         MVC   SYSEBC(4),DBW           Move to user field
+         MVC   MSGTXT,MSG02            Move message to dynamic area
+         MVC   MSGTXT+38(3),SYSEBC+1
+         MVC   MSGTXT+17(8),COMMAND    Abended TSO command
+         LA    R1,MSGTXT               Area address
+         LA    R0,50                   Length
+         TPUT  (1),(0),R               Issue abend message
+         BR    R14                     Cleanup
+         TITLE 'Constants and literals'
+MSG01    DC    CL50'TSOEXEC: Command yyyyyyyy not found'
+MSG02    DC    CL50'TSOEXEC: Command yyyyyyyy abended CC= XXX'
+STOPSPCE DC    256X'00'                TRT table not to stop
+         ORG   STOPSPCE+X'40'          Except the blank
+         DC    X'40'
+         ORG   ,                       Reset location counter
+         LTORG ,
+         TITLE 'Working storage'
+WORKAREA DSECT                         Save area + working storage
+SAVE     DS    18F                     Our save area
+DBW      DS    D                       Workfield 1
+DBW2     DS    D                       Workfield 2
+PROCTCB  DS    F                       TCB of attach program
+SYSEBC   DS    F                       Abend code in EBCDIC
+RC       DS    F                       Return code command processor
+SAVESTAI DS    6F
+MYCPPL   DS    4F                      CPPL of this routine
+ECB      DS    F
+BLDLLIST DS    0F
+N1       DC    AL2(1)                  BLDL 1 entry
+L1       DC    AL2(76)                 Length of entry
+BLDLNAME DS    CL8                     Command name to retrieve
+BLDLTTR  DS    CL3                     TTR of TSO command
+BLDLKZ   DS    XL2                     K and Z byte
+BLDLC    DS    X                       Indicator byte
+         DS    CL62                    Max 31 halfwords userdata
+*
+SYSTEMCC DS    H                       Abend code TSO CP
+COMMAND  DS    CL8                     Name of TSO command processor
+ATCHLST  ATTACH SF=L                   ATTACH SF=(E,ATCHLST)
+ALSTLEN  EQU   *-ATCHLST
+*
+TSOCMD   DS    0CL260
+CMDL     DS    H                       Length of command buffer
+CMDOFFS  DS    H'08'                   Offset to first operand
+CMD      DS    CL256                   Name of TSO command processor
+*                                      + operands
+MSGTXT   DS    CL50
+*
+FLGS     DS    X
+$APFSET  EQU   128                     JSCBAUTH is set by TSOEXEC
+WORKL    EQU   *-WORKAREA
+         TITLE 'Register equates + other DSECT''s'
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+MAGIC    EQU   244
+         IHAPDS PDSBLDL=YES
+         CVT   DSECT=YES,LIST=NO
+         PRINT NOGEN
+         IHAPSA
+         IHASDWA
+         IKJTCB
+         IEZJSCB
+         IKJCPPL
+         IKJECT
+         END
