@@ -1,0 +1,13 @@
+//MAND#F   JOB (001),'submit mand jobs',CLASS=A,MSGCLASS=X
+//S       PROC P=
+//        EXEC PGM=IEBGENER
+//SYSIN     DD DUMMY
+//SYSPRINT  DD SYSOUT=*
+//SYSUT1    DD DISP=SHR,DSN=WEGSCD.MBROT(FH&P)
+//          DD DISP=SHR,DSN=WEGSCD.MBROT(F7&P)
+//SYSUT2    DD SYSOUT=(A,INTRDR)
+//        PEND
+//*       EXEC S,P=CLR4
+//*       EXEC S,P=CLR8
+//        EXEC S,P=GRR4
+//        EXEC S,P=GRR8

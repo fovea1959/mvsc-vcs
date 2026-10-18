@@ -23,7 +23,7 @@ C
       XSPAN = ABS(X1-X0)
       YSPAN = ABS(Y1-Y0)
 C
-      PUNCH , '# watfiv_complex_', XS, '_', YS, '.pgm'
+      PUNCH , '# w5_complex_', XS, '_', YS, '.pgm'
       PUNCH , 'P2'
       PUNCH , IW
       PUNCH , IH

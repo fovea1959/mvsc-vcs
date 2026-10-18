@@ -1,6 +1,11 @@
 Naming scheme
 LLOODD
 
-LL = Language, FH = Fortran H, W5 = Watfiv
-OO = Output. PR = Print, GR = Grey, CL = COlor.
+LL = Language
+  FH = FORTRAN H JCL
+  F7 = FORTRAN 77 JCL
+  F# = FORTRAN H/77 source code
+  W5 = Watfiv
+  P# = Palette file
+OO = Output. PR = Print, GR = Grey, CL = Color.
 DD = Datatype. R4 = REAL, R8 = REAL*8, CX = Complex
