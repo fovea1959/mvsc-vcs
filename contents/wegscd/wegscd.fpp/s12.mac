@@ -1,0 +1,1102 @@
+/*
+ * subst.c - minimal preprocessor: object-like symbol substitution plus
+ *           conditionals with integer and string expressions, and
+ *           numeric evaluation inside #define.
+ *
+ * Written for C89 (no snprintf, no declarations after statements).
+ * All lines are 80 columns or less.
+ *
+ * Build:  cc -O2 -o subst subst.c
+ * Usage:  subst [-f] [-DNAME[=value]] [-UNAME] ... < input > output
+ *
+ *   -f   fixed-form Fortran: substitute only in columns 7 through 71
+ *        inclusive. Columns 1-6 (label and continuation) and columns
+ *        72 onward (sequence field) are copied unchanged. Comment lines
+ *        (C, c or * in column 1) are also copied unchanged.
+ *
+ * Supported directives:
+ *     #define NAME value     #define NAME = EXPR     #undef NAME
+ *     #ifdef NAME            #ifndef NAME
+ *     #if EXPR               #elif EXPR
+ *     #else                  #endif
+ *     #error TEXT            #message TEXT
+ *
+ * #error and #message write TEXT to stderr (not to the output). #error
+ * also counts as a problem, so the exit status is 1. Macros in the text
+ * of #message are expanded; the text of #error is printed as written.
+ * Both are ignored in skipped regions.
+ *
+ * Suppressing expansion in #message text:
+ *     \NAME     prints NAME literally (the backslash is removed)
+ *     \\        prints a single backslash
+ * A backslash followed by anything else is printed as is. These escapes
+ * apply only in #message text, not in ordinary lines or #define values.
+ *
+ * Numeric evaluation (only in #define):
+ *     #define NAME = EXPR     evaluated once, NAME is defined as the
+ *                             result
+ *     #define NAME ... eval(EXPR) ...
+ *                             each eval(EXPR) in the value is replaced
+ *                             by its integer result when the #define
+ *                             is read
+ *     eval is not special in ordinary text lines.
+ *
+ * Expressions (lowest to highest precedence):
+ *     ××   &&   == !=   < <= > >=   + -   * / %   ! - +(unary)
+ *     integers (decimal or 0x hex), strings ("..." or '...'),
+ *     defined(NAME) / defined NAME, macro names, parentheses
+ *
+ * Directive lines, and lines in skipped regions, are replaced with blan
+ * lines so line numbers stay the same. A trailing backslash continues a
+ * directive onto the next line.
+ *
+ * Exit status: 0 on success, 1 if any problem was reported (output is
+ * still written), 2 for a bad command line.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdarg.h>
+
+#define MAX_DEPTH 64    /* macro expansion nesting */
+#define MAX_COND  64    /* #if nesting */
+
+#define FIRST_COL  7    /* -f: first column that is substituted */
+#define LAST_COL  71    /* -f: last column that is substituted */
+
+struct macro {
+    char *name, *value;
+    struct macro *next;
+};
+static struct macro *macros;
+
+struct cond {
+    int parent;     /* enclosing region was active */
+    int active;     /* current branch is being output */
+    int taken;      /* some branch of this #if was already active */
+    int seen_else;
+    long line;      /* line of the opening directive */
+};
+static struct cond cstack[MAX_COND];
+static int csp;
+
+static int nerrors;     /* number of problems reported */
+static int msg_escape;  /* set during #message text: honor \NAME */
+
+typedef struct { char *p; size_t len, cap; } Buf;
+
+/* Report a problem and remember that it happened. */
+static void diag(long lineno, const char *fmt, ...)
+{
+    va_list ap;
+    fprintf(stderr, "line %ld: ", lineno);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    nerrors++;
+}
+
+static void *xrealloc(void *p, size_t n)
+{
+    p = realloc(p, n);
+    if (!p) {
+        perror("realloc");
+        exit(1);
+    }
+    return p;
+}
+
+static char *xstrndup(const char *s, size_t n)
+{
+    char *d = (char *)xrealloc(NULL, n + 1);
+    memcpy(d, s, n);
+    d[n] = '\0';
+    return d;
+}
+
+static void buf_putn(Buf *b, const char *s, size_t n)
+{
+    if (b->len + n + 1 > b->cap) {
+        b->cap = (b->len + n + 1) * 2;
+        b->p = (char *)xrealloc(b->p, b->cap);
+    }
+    memcpy(b->p + b->len, s, n);
+    b->len += n;
+    b->p[b->len] = '\0';
+}
+
+static int ident_start(int c) { return isalpha(c) ×× c == '_'; }
+static int ident_char(int c)  { return isalnum(c) ×× c == '_'; }
+
+/* Limit for "%.*s" when printing a name into a fixed-size buffer. */
+static int clip(size_t n)
+{
+    return n > 60 ? 60 : (int)n;
+}
+
+/* ---------- macro table ---------- */
+
+static struct macro *find_macro(const char *name, size_t len)
+{
+    struct macro *m;
+    for (m = macros; m; m = m->next)
+        if (strlen(m->name) == len && memcmp(m->name, name, len) == 0)
+            return m;
+    return NULL;
+}
+
+static void define_macro(const char *name, size_t nlen, const char *valu
+{
+    struct macro *m = find_macro(name, nlen);
+    if (m) {
+        free(m->value);
+    } else {
+        m = (struct macro *)xrealloc(NULL, sizeof *m);
+        m->name = xstrndup(name, nlen);
+        m->next = macros;
+        macros = m;
+    }
+    m->value = xstrndup(value, strlen(value));
+}
+
+static void undef_macro(const char *name, size_t nlen)
+{
+    struct macro **pp, *m;
+    for (pp = &macros; (m = *pp) != NULL; pp = &m->next)
+        if (strlen(m->name) == nlen && memcmp(m->name, name, nlen) == 0)
+            *pp = m->next;
+            free(m->name);
+            free(m->value);
+            free(m);
+            return;
+        }
+}
+
+/* ---------- substitution ---------- */
+
+/* Expand identifiers in s into out. `stack' holds macros currently bein
+   expanded so that self-referential definitions cannot recurse forever.
+   When msg_escape is set, \NAME and \\ are honored at the top level
+   (sp == 0) only, never inside macro values. */
+static void expand(const char *s, Buf *out, struct macro **stack, int sp
+{
+    while (*s) {
+        if (msg_escape && sp == 0 && *s == '\\') {
+            if (ident_start((unsigned char)s[1])) {
+                /* \NAME: print NAME literally */
+                const char *t = s + 1;
+                while (ident_char((unsigned char)*t))
+                    t++;
+                buf_putn(out, s + 1, (size_t)(t - s - 1));
+                s = t;
+            } else if (s[1] == '\\') {
+                /* \\ : one backslash */
+                buf_putn(out, "\\", 1);
+                s += 2;
+            } else {
+                /* lone backslash */
+                buf_putn(out, "\\", 1);
+                s++;
+            }
+        } else if (*s == '"' ×× *s == '\'') {
+            /* string: copy untouched */
+            char q = *s;
+            const char *t = s + 1;
+            while (*t && *t != q) {
+                if (*t == '\\' && t[1])
+                    t++;
+                t++;
+            }
+            if (*t)
+                t++;                    /* include closing quote */
+            buf_putn(out, s, (size_t)(t - s));
+            s = t;
+        } else if (ident_start((unsigned char)*s)) {
+            const char *t = s;
+            struct macro *m;
+            int i, active = 0;
+            while (ident_char((unsigned char)*t))
+                t++;
+            m = find_macro(s, (size_t)(t - s));
+            for (i = 0; m && i < sp; i++)
+                if (stack[i] == m)
+                    active = 1;
+            if (m && !active && sp < MAX_DEPTH) {
+                stack[sp] = m;
+                expand(m->value, out, stack, sp + 1);
+            } else {
+                buf_putn(out, s, (size_t)(t - s));
+            }
+            s = t;
+        } else if (isdigit((unsigned char)*s)) {
+            /* number: 1E5, 0x1F, 2.5D0 */
+            const char *t = s;
+            while (ident_char((unsigned char)*t) ×× *t == '.')
+                t++;
+            buf_putn(out, s, (size_t)(t - s));
+            s = t;
+        } else {
+            buf_putn(out, s, 1);
+            s++;
+        }
+    }
+}
+
+/* Fixed-form variant: expand only columns FIRST_COL..LAST_COL of line.
+   Comment lines (C, c or * in column 1) are copied unchanged. If text
+   follows column LAST_COL, the substituted field is padded back to its
+   original width so that text stays in its original columns. */
+static void expand_fixed(const char *line, Buf *out, struct macro **stac
+                         long lineno)
+{
+    const size_t head  = FIRST_COL - 1;             /* columns 1-6 */
+    const size_t width = LAST_COL - FIRST_COL + 1;  /* columns 7-71 */
+    size_t len = strlen(line);
+    size_t mid_end, before, got;
+    char *mid;
+
+    /* Whole-line comment: C, c or * in column 1. */
+    if (len > 0 && strchr("Cc*", line[0])) {
+        buf_putn(out, line, len);
+        return;
+    }
+
+    buf_putn(out, line, len < head ? len : head);
+    if (len <= head)
+        return;
+
+    mid_end = len < head + width ? len : head + width;
+    mid = xstrndup(line + head, mid_end - head);
+    before = out->len;
+    expand(mid, out, stack, 0);
+    free(mid);
+    got = out->len - before;
+
+    if (got > width)
+        diag(lineno, "substitution extends past column %d", LAST_COL);
+
+    if (len > head + width) {                       /* sequence field */
+        for (; got < width; got++)
+            buf_putn(out, " ", 1);
+        buf_putn(out, line + head + width, len - head - width);
+    }
+}
+
+/* ---------- expression evaluator ---------- */
+
+/* A value is either an integer or a string (pointer into the source
+   text, so nothing needs to be freed). */
+typedef struct {
+    int is_str;
+    long n;
+    const char *s;
+    size_t len;
+} Val;
+
+typedef struct {
+    const char *p;
+    int depth;          /* macro-value nesting */
+    int strict;         /* undefined names and empty macros are errors *
+    const char *err;    /* first error, or NULL */
+    char msg[160];      /* storage for err */
+} Parser;
+
+static Val mkint(long n)
+{
+    Val v;
+    v.is_str = 0;
+    v.n = n;
+    v.s = NULL;
+    v.len = 0;
+    return v;
+}
+
+static int truth(Val v)
+{
+    return v.is_str ? v.len > 0 : v.n != 0;
+}
+
+/* Record the first error only. Callers keep the formatted text under
+   about 150 characters (names are printed through clip()), so the
+   fixed buffer cannot overflow. */
+static void fail(Parser *ps, const char *fmt, ...)
+{
+    va_list ap;
+    if (ps->err)
+        return;
+    va_start(ap, fmt);
+    vsprintf(ps->msg, fmt, ap);
+    va_end(ap);
+    ps->err = ps->msg;
+}
+
+static void pws(Parser *ps)
+{
+    while (*ps->p == ' ' ×× *ps->p == '\t')
+        ps->p++;
+}
+
+static int accept(Parser *ps, const char *op)
+{
+    size_t n = strlen(op);
+    pws(ps);
+    if (strncmp(ps->p, op, n) == 0) {
+        ps->p += n;
+        return 1;
+    }
+    return 0;
+}
+
+static Val parse_or(Parser *ps);
+
+static Val primary(Parser *ps)
+{
+    const char *p;
+    pws(ps);
+    p = ps->p;
+
+    if (*p == '(') {
+        Val v;
+        ps->p++;
+        v = parse_or(ps);
+        if (!accept(ps, ")"))
+            fail(ps, "missing ')'");
+        return v;
+    }
+
+    if (isdigit((unsigned char)*p)) {
+        char *end;
+        long n;
+        if (p[0] == '0' && (p[1] == 'x' ×× p[1] == 'X'))
+            n = strtol(p + 2, &end, 16);
+        else
+            n = strtol(p, &end, 10);
+        ps->p = end;
+        if (ident_char((unsigned char)*end))
+            fail(ps, "malformed number");
+        return mkint(n);
+    }
+
+    if (*p == '"' ×× *p == '\'') {
+        char q = *p;
+        const char *t = p + 1;
+        Val v;
+        while (*t && *t != q)
+            t++;
+        if (!*t) {
+            fail(ps, "unterminated string");
+            ps->p = t;
+            return mkint(0);
+        }
+        v.is_str = 1;
+        v.n = 0;
+        v.s = p + 1;
+        v.len = (size_t)(t - p - 1);
+        ps->p = t + 1;
+        return v;
+    }
+
+    if (ident_start((unsigned char)*p)) {
+        const char *t = p;
+        size_t len;
+        struct macro *m;
+
+        while (ident_char((unsigned char)*t))
+            t++;
+        len = (size_t)(t - p);
+        ps->p = t;
+
+        if (len == 7 && memcmp(p, "defined", 7) == 0) {
+            int paren = accept(ps, "(");
+            const char *n;
+            size_t nl;
+            pws(ps);
+            n = ps->p;
+            while (ident_char((unsigned char)*ps->p))
+                ps->p++;
+            nl = (size_t)(ps->p - n);
+            if (nl == 0) {
+                fail(ps, "defined needs a name");
+                return mkint(0);
+            }
+            if (paren && !accept(ps, ")"))
+                fail(ps, "missing ')' after defined(");
+            return mkint(find_macro(n, nl) != NULL);
+        }
+
+        m = find_macro(p, len);
+        if (!m) {                       /* undefined name -> 0 */
+            if (ps->strict)
+                fail(ps, "undefined name '%.*s'", clip(len), p);
+            return mkint(0);
+        }
+        if (ps->depth >= MAX_DEPTH) {
+            fail(ps, "macro nesting too deep");
+            return mkint(0);
+        } else {
+            Parser sub;
+            Val v;
+            sub.p = m->value;
+            sub.depth = ps->depth + 1;
+            sub.strict = ps->strict;
+            sub.err = NULL;
+            pws(&sub);
+            if (!*sub.p) {              /* empty value -> 0 */
+                if (ps->strict)
+                    fail(ps, "macro '%.*s' has an empty value",
+                         clip(len), p);
+                return mkint(0);
+            }
+            v = parse_or(&sub);
+            pws(&sub);
+            if (!sub.err && *sub.p)
+                fail(&sub, "macro '%.*s' is not a valid expression",
+                     clip(len), p);
+            if (sub.err)
+                fail(ps, "%s", sub.err);
+            return v;
+        }
+    }
+
+    fail(ps, "syntax error in expression");
+    return mkint(0);
+}
+
+static Val unary(Parser *ps)
+{
+    pws(ps);
+    if (*ps->p == '!' && ps->p[1] != '=') {
+        Val v;
+        ps->p++;
+        v = unary(ps);
+        return mkint(!truth(v));
+    }
+    if (*ps->p == '-' ×× *ps->p == '+') {
+        char c = *ps->p++;
+        Val v = unary(ps);
+        if (v.is_str) {
+            fail(ps, "arithmetic on a string");
+            return mkint(0);
+        }
+        return mkint(c == '-' ? -v.n : v.n);
+    }
+    return primary(ps);
+}
+
+static Val mul(Parser *ps)
+{
+    Val l = unary(ps);
+    for (;;) {
+        char c;
+        Val r;
+        pws(ps);
+        c = *ps->p;
+        if (c != '*' && c != '/' && c != '%')
+            break;
+        ps->p++;
+        r = unary(ps);
+        if (l.is_str ×× r.is_str) {
+            fail(ps, "arithmetic on a string");
+            l = mkint(0);
+            continue;
+        }
+        if (c != '*' && r.n == 0) {
+            fail(ps, "division by zero");
+            l = mkint(0);
+            continue;
+        }
+        if (c == '*')
+            l = mkint(l.n * r.n);
+        else if (c == '/')
+            l = mkint(l.n / r.n);
+        else
+            l = mkint(l.n % r.n);
+    }
+    return l;
+}
+
+static Val add(Parser *ps)
+{
+    Val l = mul(ps);
+    for (;;) {
+        char c;
+        Val r;
+        pws(ps);
+        c = *ps->p;
+        if (c != '+' && c != '-')
+            break;
+        ps->p++;
+        r = mul(ps);
+        if (l.is_str ×× r.is_str) {
+            fail(ps, "arithmetic on a string");
+            l = mkint(0);
+            continue;
+        }
+        l = mkint(c == '+' ? l.n + r.n : l.n - r.n);
+    }
+    return l;
+}
+
+enum { OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE };
+
+static int compare(Parser *ps, Val a, Val b, int op)
+{
+    int c;
+    if (a.is_str && b.is_str) {
+        size_t n = a.len < b.len ? a.len : b.len;
+        c = memcmp(a.s, b.s, n);
+        if (c == 0)
+            c = (a.len > b.len) - (a.len < b.len);
+    } else if (!a.is_str && !b.is_str) {
+        c = (a.n > b.n) - (a.n < b.n);
+    } else {
+        fail(ps, "cannot compare a string with an integer");
+        return 0;
+    }
+    switch (op) {
+    case OP_EQ: return c == 0;
+    case OP_NE: return c != 0;
+    case OP_LT: return c < 0;
+    case OP_LE: return c <= 0;
+    case OP_GT: return c > 0;
+    default:    return c >= 0;
+    }
+}
+
+static Val relational(Parser *ps)
+{
+    Val l = add(ps);
+    for (;;) {
+        int op;
+        Val r;
+        if      (accept(ps, "<=")) op = OP_LE;
+        else if (accept(ps, ">=")) op = OP_GE;
+        else if (accept(ps, "<"))  op = OP_LT;
+        else if (accept(ps, ">"))  op = OP_GT;
+        else break;
+        r = add(ps);
+        l = mkint(compare(ps, l, r, op));
+    }
+    return l;
+}
+
+static Val equality(Parser *ps)
+{
+    Val l = relational(ps);
+    for (;;) {
+        int op;
+        Val r;
+        if      (accept(ps, "==")) op = OP_EQ;
+        else if (accept(ps, "!=")) op = OP_NE;
+        else break;
+        r = relational(ps);
+        l = mkint(compare(ps, l, r, op));
+    }
+    return l;
+}
+
+static Val parse_and(Parser *ps)
+{
+    Val l = equality(ps);
+    while (accept(ps, "&&")) {
+        Val r = equality(ps);
+        l = mkint(truth(l) && truth(r));
+    }
+    return l;
+}
+
+static Val parse_or(Parser *ps)
+{
+    Val l = parse_and(ps);
+    while (accept(ps, "××")) {
+        Val r = parse_and(ps);
+        l = mkint(truth(l) ×× truth(r));
+    }
+    return l;
+}
+
+/* Evaluate a whole #if/#elif expression; errors give a warning and
+   false. */
+static int eval_cond(const char *s, long lineno)
+{
+    Parser ps;
+    Val v;
+    ps.p = s;
+    ps.depth = 0;
+    ps.strict = 0;
+    ps.err = NULL;
+    v = parse_or(&ps);
+    pws(&ps);
+    if (!ps.err && *ps.p)
+        fail(&ps, "unexpected text after expression");
+    if (ps.err) {
+        diag(lineno, "#if: %s (treated as false)", ps.err);
+        return 0;
+    }
+    return truth(v);
+}
+
+/* Strict numeric evaluation for eval() and "#define NAME = EXPR".
+   Undefined names, empty macros, and string results are errors.
+   Returns 1 and sets *out on success; otherwise returns 0 and puts a
+   message in msg. */
+static int eval_text(const char *s, size_t len, long *out,
+                     char *msg, size_t msgsz)
+{
+    char *copy = xstrndup(s, len);
+    Parser ps;
+    Val v;
+    int ok = 0;
+
+    ps.p = copy;
+    ps.depth = 0;
+    ps.strict = 1;
+    ps.err = NULL;
+    v = parse_or(&ps);
+    pws(&ps);
+    if (!ps.err && *ps.p)
+        fail(&ps, "unexpected text after expression");
+    if (!ps.err && v.is_str)
+        fail(&ps, "result is a string, not an integer");
+    if (ps.err) {
+        strncpy(msg, ps.err, msgsz - 1);
+        msg[msgsz - 1] = '\0';
+    } else {
+        *out = v.n;
+        ok = 1;
+    }
+    free(copy);
+    return ok;
+}
+
+/* Given p pointing at '(', return a pointer to the matching ')' or
+   NULL. Quoted strings are skipped. */
+static const char *match_paren(const char *p)
+{
+    int depth = 0;
+    for (; *p; p++) {
+        if (*p == '"' ×× *p == '\'') {
+            char q = *p++;
+            while (*p && *p != q)
+                p++;
+            if (!*p)
+                return NULL;
+        } else if (*p == '(') {
+            depth++;
+        } else if (*p == ')') {
+            if (--depth == 0)
+                return p;
+        }
+    }
+    return NULL;
+}
+
+/* Replace each eval(EXPR) in a #define value with its integer result.
+   Everything else is copied unchanged (macros in the value are not
+   expanded here; that still happens when the macro is used). Quoted
+   strings are skipped. Returns a malloc'd string, or NULL after
+   reporting an error. */
+static char *eval_define_value(const char *s, const char *name, size_t n
+                               long lineno)
+{
+    Buf b = { NULL, 0, 0 };
+
+    while (*s) {
+        if (*s == '"' ×× *s == '\'') {
+            const char *t = s + 1;
+            while (*t && *t != *s)
+                t++;
+            if (*t)
+                t++;
+            buf_putn(&b, s, (size_t)(t - s));
+            s = t;
+        } else if (ident_start((unsigned char)*s)) {
+            const char *t = s, *q, *end;
+            while (ident_char((unsigned char)*t))
+                t++;
+            if (t - s == 4 && memcmp(s, "eval", 4) == 0) {
+                q = t;
+                while (*q == ' ' ×× *q == '\t')
+                    q++;
+                if (*q == '(') {
+                    long v;
+                    char num[32], msg[160];
+                    end = match_paren(q);
+                    if (!end) {
+                        diag(lineno, "#define %.*s: eval: missing ')'",
+                             clip(nlen), name);
+                        free(b.p);
+                        return NULL;
+                    }
+                    if (!eval_text(q + 1, (size_t)(end - q - 1), &v,
+                                   msg, sizeof msg)) {
+                        diag(lineno, "#define %.*s: eval: %s",
+                             clip(nlen), name, msg);
+                        free(b.p);
+                        return NULL;
+                    }
+                    sprintf(num, "%ld", v);
+                    buf_putn(&b, num, strlen(num));
+                    s = end + 1;
+                    continue;
+                }
+            }
+            buf_putn(&b, s, (size_t)(t - s));
+            s = t;
+        } else if (isdigit((unsigned char)*s)) {
+            const char *t = s;
+            while (ident_char((unsigned char)*t) ×× *t == '.')
+                t++;
+            buf_putn(&b, s, (size_t)(t - s));
+            s = t;
+        } else {
+            buf_putn(&b, s, 1);
+            s++;
+        }
+    }
+    if (!b.p)
+        return xstrndup("", 0);
+    return b.p;
+}
+
+/* ---------- input ---------- */
+
+static char *read_line(FILE *fp)
+{
+    size_t cap = 128, len = 0;
+    char *buf = (char *)xrealloc(NULL, cap);
+    int c;
+
+    while ((c = fgetc(fp)) != EOF && c != '\n') {
+        if (len + 1 >= cap) {
+            cap *= 2;
+            buf = (char *)xrealloc(buf, cap);
+        }
+        buf[len++] = (char)c;
+    }
+    if (c == EOF && len == 0) {
+        free(buf);
+        return NULL;
+    }
+    if (len > 0 && buf[len - 1] == '\r')
+        len--;
+    buf[len] = '\0';
+    return buf;
+}
+
+static const char *skip_ws(const char *s)
+{
+    while (*s == ' ' ×× *s == '\t')
+        s++;
+    return s;
+}
+
+static int is_directive(const char *line)
+{
+    return *skip_ws(line) == '#';
+}
+
+/* If s begins with the whole word kw, return a pointer just past it. */
+static const char *keyword(const char *s, const char *kw)
+{
+    size_t n = strlen(kw);
+    if (strncmp(s, kw, n) == 0 && !ident_char((unsigned char)s[n]))
+        return s + n;
+    return NULL;
+}
+
+/* ---------- conditionals ---------- */
+
+static int region_active(void)
+{
+    return csp == 0 ×× cstack[csp - 1].active;
+}
+
+static void push_cond(long lineno, int parent, int cond)
+{
+    if (csp >= MAX_COND) {
+        diag(lineno, "conditionals nested too deeply");
+        exit(1);
+    }
+    cstack[csp].parent    = parent;
+    cstack[csp].active    = parent && cond;
+    cstack[csp].taken     = cstack[csp].active;
+    cstack[csp].seen_else = 0;
+    cstack[csp].line      = lineno;
+    csp++;
+}
+
+static void do_ifdef(const char *s, long lineno, int want_defined)
+{
+    const char *n;
+    size_t nlen;
+    int parent = region_active(), cond = 0;
+
+    s = skip_ws(s);
+    n = s;
+    while (ident_char((unsigned char)*s))
+        s++;
+    nlen = (size_t)(s - n);
+
+    if (nlen == 0)
+        diag(lineno, "#%s needs a name",
+             want_defined ? "ifdef" : "ifndef");
+    else
+        cond = ((find_macro(n, nlen) != NULL) == want_defined);
+
+    push_cond(lineno, parent, cond);
+}
+
+static void do_if(const char *s, long lineno)
+{
+    int parent = region_active();
+    /* Don't evaluate (or complain about) expressions in skipped
+       regions. */
+    push_cond(lineno, parent, parent ? eval_cond(s, lineno) : 0);
+}
+
+static void do_elif(const char *s, long lineno)
+{
+    struct cond *c;
+    if (csp == 0) {
+        diag(lineno, "#elif without #if");
+        return;
+    }
+    c = &cstack[csp - 1];
+    if (c->seen_else) {
+        diag(lineno, "#elif after #else");
+        c->active = 0;
+        return;
+    }
+    if (!c->parent ×× c->taken)
+        c->active = 0;
+    else
+        c->active = eval_cond(s, lineno);
+    if (c->active)
+        c->taken = 1;
+}
+
+static void do_else(long lineno)
+{
+    struct cond *c;
+    if (csp == 0) {
+        diag(lineno, "#else without #if");
+        return;
+    }
+    c = &cstack[csp - 1];
+    if (c->seen_else)
+        diag(lineno, "duplicate #else");
+    c->seen_else = 1;
+    c->active = c->parent && !c->taken;
+    if (c->active)
+        c->taken = 1;
+}
+
+static void do_endif(long lineno)
+{
+    if (csp == 0)
+        diag(lineno, "#endif without #if");
+    else
+        csp--;
+}
+
+/* ---------- directives ---------- */
+
+static void do_directive(const char *line, long lineno)
+{
+    const char *s = skip_ws(skip_ws(line) + 1);   /* after '#' */
+    const char *rest, *n;
+    size_t nlen;
+
+    /* Conditional directives are processed even in skipped regions so
+       that nesting is tracked correctly. */
+    if ((rest = keyword(s, "ifdef")) != NULL) {
+        do_ifdef(rest, lineno, 1);
+        return;
+    }
+    if ((rest = keyword(s, "ifndef")) != NULL) {
+        do_ifdef(rest, lineno, 0);
+        return;
+    }
+    if ((rest = keyword(s, "if")) != NULL) {
+        do_if(rest, lineno);
+        return;
+    }
+    if ((rest = keyword(s, "elif")) != NULL) {
+        do_elif(rest, lineno);
+        return;
+    }
+    if (keyword(s, "else") != NULL) {
+        do_else(lineno);
+        return;
+    }
+    if (keyword(s, "endif") != NULL) {
+        do_endif(lineno);
+        return;
+    }
+
+    if (!region_active())
+        return;                 /* ignore everything else when skipping
+
+    if ((rest = keyword(s, "define")) != NULL) {
+        char *val, *ev;
+        size_t vlen;
+        s = skip_ws(rest);
+        n = s;
+        if (!ident_start((unsigned char)*s)) {
+            diag(lineno, "#define needs a name");
+            return;
+        }
+        while (ident_char((unsigned char)*s))
+            s++;
+        nlen = (size_t)(s - n);
+        if (*s == '(') {
+            diag(lineno, "function-like macros are not supported (%.*s)"
+                 clip(nlen), n);
+            return;
+        }
+        s = skip_ws(s);
+        vlen = strlen(s);
+        while (vlen > 0 && isspace((unsigned char)s[vlen - 1]))
+            vlen--;
+
+        /* "#define NAME = EXPR": evaluate now, store the integer
+           result. A value that starts with "==" is ordinary text,
+           not this form. */
+        if (*s == '=' && s[1] != '=') {
+            long v;
+            char num[32], msg[160];
+            s = skip_ws(s + 1);
+            vlen = strlen(s);
+            while (vlen > 0 && isspace((unsigned char)s[vlen - 1]))
+                vlen--;
+            if (!eval_text(s, vlen, &v, msg, sizeof msg)) {
+                diag(lineno, "#define %.*s: %s", clip(nlen), n, msg);
+                return;
+            }
+            sprintf(num, "%ld", v);
+            define_macro(n, nlen, num);
+            return;
+        }
+
+        /* Ordinary value: replace any eval(...) in it, then store. */
+        val = xstrndup(s, vlen);
+        ev = eval_define_value(val, n, nlen, lineno);
+        free(val);
+        if (!ev)
+            return;             /* error already reported */
+        define_macro(n, nlen, ev);
+        free(ev);
+    } else if ((rest = keyword(s, "undef")) != NULL) {
+        s = skip_ws(rest);
+        n = s;
+        while (ident_char((unsigned char)*s))
+            s++;
+        nlen = (size_t)(s - n);
+        if (nlen)
+            undef_macro(n, nlen);
+        else
+            diag(lineno, "#undef needs a name");
+    } else if ((rest = keyword(s, "error")) != NULL) {
+        size_t tlen;
+        s = skip_ws(rest);
+        tlen = strlen(s);
+        while (tlen > 0 && isspace((unsigned char)s[tlen - 1]))
+            tlen--;
+        diag(lineno, "#error: %.*s", (int)tlen, s);
+    } else if ((rest = keyword(s, "message")) != NULL) {
+        size_t tlen;
+        char *text;
+        Buf mb = { NULL, 0, 0 };
+        struct macro *mstack[MAX_DEPTH];
+        s = skip_ws(rest);
+        tlen = strlen(s);
+        while (tlen > 0 && isspace((unsigned char)s[tlen - 1]))
+            tlen--;
+        text = xstrndup(s, tlen);
+        msg_escape = 1;         /* honor \NAME and \\ in the text */
+        expand(text, &mb, mstack, 0);
+        msg_escape = 0;
+        fprintf(stderr, "line %ld: %s\n", lineno, mb.p ? mb.p : "");
+        free(text);
+        free(mb.p);
+    } else {
+        diag(lineno, "unsupported directive");
+    }
+}
+
+int main(int argc, char **argv)
+{
+    int i, fixed_form = 0;
+    char *line;
+    long lineno = 0;
+    Buf b = { NULL, 0, 0 };
+    struct macro *stack[MAX_DEPTH];
+
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-f") == 0) {
+            fixed_form = 1;
+        } else if (strncmp(argv[i], "-D", 2) == 0 && argv[i][2]) {
+            const char *d = argv[i] + 2, *eq = strchr(d, '=');
+            if (eq) {
+                char *v = xstrndup(eq + 1, strlen(eq + 1));
+                define_macro(d, (size_t)(eq - d), v);
+                free(v);
+            } else {
+                define_macro(d, strlen(d), "1");
+            }
+        } else if (strncmp(argv[i], "-U", 2) == 0 && argv[i][2]) {
+            undef_macro(argv[i] + 2, strlen(argv[i] + 2));
+        } else {
+            fprintf(stderr, "usage: %s [-f] [-DNAME[=val]] [-UNAME] "
+                            "< input > output\n", argv[0]);
+            return 2;
+        }
+    }
+
+    while ((line = read_line(stdin)) != NULL) {
+        lineno++;
+        if (is_directive(line)) {
+            long startline = lineno;
+            size_t n;
+            putchar('\n');
+            /* join backslash-continued lines */
+            while ((n = strlen(line)) > 0 && line[n - 1] == '\\') {
+                char *next = read_line(stdin);
+                line[n - 1] = ' ';
+                if (!next)
+                    break;
+                lineno++;
+                line = (char *)xrealloc(line, n + strlen(next) + 1);
+                strcpy(line + n, next);
+                free(next);
+                putchar('\n');
+            }
+            do_directive(line, startline);
+        } else if (!region_active()) {
+            putchar('\n');      /* skipped line: keep numbering */
+        } else {
+            b.len = 0;
+            if (b.p)
+                b.p[0] = '\0';
+            if (fixed_form)
+                expand_fixed(line, &b, stack, lineno);
+            else
+                expand(line, &b, stack, 0);
+            if (b.p)
+                fputs(b.p, stdout);
+            putchar('\n');
+        }
+        free(line);
+    }
+
+    while (csp > 0) {
+        csp--;
+        diag(cstack[csp].line,
+             "unterminated conditional (missing #endif)");
+    }
+
+    return nerrors ? 1 : 0;
+}

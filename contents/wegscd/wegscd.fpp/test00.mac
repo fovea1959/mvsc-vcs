@@ -1,0 +1,17 @@
+//TESTFPP  JOB (001),'Test FPP',CLASS=A,MSGCLASS=X,
+//             REGION=0K
+//        EXEC PGM=FPP,REGION=0K,
+// PARM='-f -D_D=1'
+//STEPLIB   DD DISP=SHR,DSN=WEGSCD.LINKLIB
+//SYSIN     DD *
+#ifdef _D
+#define _D10 eval( _D * 10)
+#else
+#error _D not defined
+#endif
+       REAL D/_D/, D10/_D10/
+/*
+//STDOUT    DD SYSOUT=*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*

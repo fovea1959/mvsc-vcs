@@ -63,16 +63,15 @@ C       Q IS SOMETHING ELSE
       CALL OUT (PREDIG, 'qp')
       CALL OUTFL
       STOP
-#message got to end of main
       END
       SUBROUTINE OUTINI
       COMMON /OUTBUF/ OI, O
       INTEGER OI
-      INTEGER O(132)
+      INTEGER O(80)
 C
       INTEGER SPACE/1H /
       OI = 1
-      DO 10 I = 1, 132
+      DO 10 I = 1, 80
        O(I) = SPACE
 10    CONTINUE
       RETURN
@@ -80,22 +79,21 @@ C
       SUBROUTINE OUT (I, Y)
       COMMON /OUTBUF/ OI, O
       INTEGER OI
-      INTEGER O(132)
+      INTEGER O(80)
 C
       INTEGER Y
       INTEGER DIGIT(10) /1H0,1H1,1H2,1H3,1H4,1H5,1H6,1H7,1H8,1H9/
       O(OI) = DIGIT(I+1)
       OI = OI + 1
-      IF (OI .GT. 132) CALL OUTFL
+      IF (OI .GT. 80) CALL OUTFL
       RETURN
       END
       SUBROUTINE OUTFL
       COMMON /OUTBUF/ OI, O
       INTEGER OI
-      INTEGER O(132)
-      WRITE (6, 99) O
-99    FORMAT (1H , 132A1)
+      INTEGER O(80)
+      WRITE (7, 99) O
+99    FORMAT (80A1)
       CALL OUTINI
       RETURN
-#message got to end of file
       END

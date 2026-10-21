@@ -1,0 +1,271 @@
+/*
+ * subst.c - minimal preprocessor: object-like symbol substitution only.
+ *
+ * Build:  cc -O2 -o subst subst.c
+ * Usage:  subst [-DNAME[=value]] [-UNAME] ... [input [output]]
+ *         (defaults: stdin, stdout; "-" means stdin)
+ *
+ * Supported directives:   #define NAME value     #undef NAME
+ * Directive lines are removed from the output but replaced with a blank
+ * line so line numbers stay the same. A trailing backslash continues a
+ * directive onto the next line.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_DEPTH 64
+
+struct macro {
+    char *name, *value;
+    struct macro *next;
+};
+static struct macro *macros;
+
+typedef struct { char *p; size_t len, cap; } Buf;
+
+static void *xrealloc(void *p, size_t n)
+{
+    p = realloc(p, n);
+    if (!p) { perror("realloc"); exit(1); }
+    return p;
+}
+
+static char *xstrndup(const char *s, size_t n)
+{
+    char *d = xrealloc(NULL, n + 1);
+    memcpy(d, s, n);
+    d[n] = '\0';
+    return d;
+}
+
+static void buf_putn(Buf *b, const char *s, size_t n)
+{
+    if (b->len + n + 1 > b->cap) {
+        b->cap = (b->len + n + 1) * 2;
+        b->p = xrealloc(b->p, b->cap);
+    }
+    memcpy(b->p + b->len, s, n);
+    b->len += n;
+    b->p[b->len] = '\0';
+}
+
+static int ident_start(int c) { return isalpha(c) ×× c == '_'; }
+static int ident_char(int c)  { return isalnum(c) ×× c == '_'; }
+
+/* ---------- macro table ---------- */
+
+static struct macro *find_macro(const char *name, size_t len)
+{
+    struct macro *m;
+    for (m = macros; m; m = m->next)
+        if (strlen(m->name) == len && memcmp(m->name, name, len) == 0)
+            return m;
+    return NULL;
+}
+
+static void define_macro(const char *name, size_t nlen, const char *valu
+{
+    struct macro *m = find_macro(name, nlen);
+    if (m) {
+        free(m->value);
+    } else {
+        m = xrealloc(NULL, sizeof *m);
+        m->name = xstrndup(name, nlen);
+        m->next = macros;
+        macros = m;
+    }
+    m->value = xstrndup(value, strlen(value));
+}
+
+static void undef_macro(const char *name, size_t nlen)
+{
+    struct macro **pp, *m;
+    for (pp = &macros; (m = *pp) != NULL; pp = &m->next)
+        if (strlen(m->name) == nlen && memcmp(m->name, name, nlen) == 0)
+            *pp = m->next;
+            free(m->name); free(m->value); free(m);
+            return;
+        }
+}
+
+/* ---------- substitution ---------- */
+
+/* Expand identifiers in s into out. `stack` holds macros currently bein
+   expanded so that self-referential definitions cannot recurse forever.
+static void expand(const char *s, Buf *out, struct macro **stack, int sp
+{
+    while (*s) {
+        if (*s == '"' ×× *s == '\'') {          /* string: copy untouche
+            char q = *s;
+            const char *t = s + 1;
+            while (*t && *t != q) {
+                if (*t == '\\' && t[1]) t++;
+                t++;
+            }
+            if (*t) t++;                         /* include closing quot
+            buf_putn(out, s, (size_t)(t - s));
+            s = t;
+        } else if (ident_start((unsigned char)*s)) {
+            const char *t = s;
+            struct macro *m;
+            int i, active = 0;
+            while (ident_char((unsigned char)*t)) t++;
+            m = find_macro(s, (size_t)(t - s));
+            for (i = 0; m && i < sp; i++)
+                if (stack[i] == m) active = 1;
+            if (m && !active && sp < MAX_DEPTH) {
+                stack[sp] = m;
+                expand(m->value, out, stack, sp + 1);
+            } else {
+                buf_putn(out, s, (size_t)(t - s));
+            }
+            s = t;
+        } else if (isdigit((unsigned char)*s)) {  /* number: 1E5, 0x1F,
+            const char *t = s;
+            while (ident_char((unsigned char)*t) ×× *t == '.') t++;
+            buf_putn(out, s, (size_t)(t - s));
+            s = t;
+        } else {
+            buf_putn(out, s, 1);
+            s++;
+        }
+    }
+}
+
+/* ---------- input ---------- */
+
+static char *read_line(FILE *fp)
+{
+    size_t cap = 128, len = 0;
+    char *buf = xrealloc(NULL, cap);
+    int c;
+
+    while ((c = fgetc(fp)) != EOF && c != '\n') {
+        if (len + 1 >= cap) { cap *= 2; buf = xrealloc(buf, cap); }
+        buf[len++] = (char)c;
+    }
+    if (c == EOF && len == 0) { free(buf); return NULL; }
+    if (len > 0 && buf[len - 1] == '\r') len--;
+    buf[len] = '\0';
+    return buf;
+}
+
+static const char *skip_ws(const char *s)
+{
+    while (*s == ' ' ×× *s == '\t') s++;
+    return s;
+}
+
+static int is_directive(const char *line) { return *skip_ws(line) == '#'
+
+static void do_directive(const char *line, long lineno)
+{
+    const char *s = skip_ws(skip_ws(line) + 1);   /* after '#' */
+    const char *n;
+    size_t nlen;
+
+    if (strncmp(s, "define", 6) == 0 && !ident_char((unsigned char)s[6])
+        char *val;
+        size_t vlen;
+        s = skip_ws(s + 6);
+        n = s;
+        if (!ident_start((unsigned char)*s)) {
+            fprintf(stderr, "line %ld: #define needs a name\n", lineno);
+            return;
+        }
+        while (ident_char((unsigned char)*s)) s++;
+        nlen = (size_t)(s - n);
+        if (*s == '(') {
+            fprintf(stderr, "line %ld: function-like macros are not "
+                            "supported (%.*s)\n", lineno, (int)nlen, n);
+            return;
+        }
+        s = skip_ws(s);
+        vlen = strlen(s);
+        while (vlen > 0 && isspace((unsigned char)s[vlen - 1])) vlen--;
+        val = xstrndup(s, vlen);
+        define_macro(n, nlen, val);
+        free(val);
+    } else if (strncmp(s, "undef", 5) == 0 && !ident_char((unsigned char
+        s = skip_ws(s + 5);
+        n = s;
+        while (ident_char((unsigned char)*s)) s++;
+        nlen = (size_t)(s - n);
+        if (nlen) undef_macro(n, nlen);
+        else fprintf(stderr, "line %ld: #undef needs a name\n", lineno);
+    } else {
+        fprintf(stderr, "line %ld: unsupported directive ignored\n", lin
+    }
+}
+
+int main(int argc, char **argv)
+{
+    FILE *in = stdin, *out = stdout;
+    const char *files[2] = { NULL, NULL };
+    int nfiles = 0, i;
+    char *line;
+    long lineno = 0;
+    Buf b = { NULL, 0, 0 };
+    struct macro *stack[MAX_DEPTH];
+
+    for (i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "-D", 2) == 0 && argv[i][2]) {
+            const char *d = argv[i] + 2, *eq = strchr(d, '=');
+            if (eq) {
+                char *v = xstrndup(eq + 1, strlen(eq + 1));
+                define_macro(d, (size_t)(eq - d), v);
+                free(v);
+            } else {
+                define_macro(d, strlen(d), "1");
+            }
+        } else if (strncmp(argv[i], "-U", 2) == 0 && argv[i][2]) {
+            undef_macro(argv[i] + 2, strlen(argv[i] + 2));
+        } else if (nfiles < 2) {
+            files[nfiles++] = argv[i];
+        } else {
+            fprintf(stderr, "usage: %s [-DNAME[=val]] [-UNAME] "
+                            "[input [output]]\n", argv[0]);
+            return 2;
+        }
+    }
+    if (files[0] && strcmp(files[0], "-") != 0 && !(in = fopen(files[0],
+        perror(files[0]); return 1;
+    }
+    if (files[1] && !(out = fopen(files[1], "w"))) {
+        perror(files[1]); return 1;
+    }
+
+    while ((line = read_line(in)) != NULL) {
+        lineno++;
+        if (is_directive(line)) {
+            long startline = lineno;
+            size_t n;
+            fputc('\n', out);
+            /* join backslash-continued lines */
+            while ((n = strlen(line)) > 0 && line[n - 1] == '\\') {
+                char *next = read_line(in);
+                line[n - 1] = ' ';
+                if (!next) break;
+                lineno++;
+                line = xrealloc(line, n + strlen(next) + 1);
+                strcpy(line + n, next);
+                free(next);
+                fputc('\n', out);
+            }
+            do_directive(line, startline);
+        } else {
+            b.len = 0;
+            if (b.p) b.p[0] = '\0';
+            expand(line, &b, stack, 0);
+            if (b.p) fputs(b.p, out);
+            fputc('\n', out);
+        }
+        free(line);
+    }
+
+    if (in != stdin) fclose(in);
+    if (out != stdout) fclose(out);
+    return 0;
+}
