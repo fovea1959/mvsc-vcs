@@ -66,6 +66,8 @@ int main(void) {
   pi.fp = fopen("dd:pi", "r");
   answer.fp = fopen("dd:answer", "r");
 
+  printf("\n");
+
   while (1) {
 	   answer_digit = get_digit(&answer);
 	   if (answer_digit < 0) {
@@ -86,7 +88,7 @@ int main(void) {
 	   if (pi_digit != answer_digit) {
 	     good = 0;
 	     printf(
-	       "Difference at digit %d: reference %d, answer %d\n",
+	       "answer bad at digit %d: reference %d, answer %d\n",
 	       answer.count, pi_digit, answer_digit
 	     );
 	     break;
@@ -98,7 +100,6 @@ int main(void) {
   if (good) {
 	   printf("answer has %d good digits\n", answer.count);
   } else {
-	   printf("answer bad at %d digits\n", answer.count);
 	   for (i = 0; i < LL; i++) {
 	     extra_digit = get_digit(&pi);
 	     if (extra_digit >= 0)
@@ -112,6 +113,10 @@ int main(void) {
       last_pi, pi_digit, next_pi);
     printf(" answer: ...%s %d %s\n",
       last_answer, answer_digit, next_answer);
+    while (! answer.eof) {
+      get_digit(&answer);
+    }
+	   printf("answer has %d total digits\n", answer.count);
   }
   return good ? 0 : 1;
 }
@@ -120,7 +125,7 @@ int main(void) {
 //GO.ANSWER DD DSN=WEGSCD.PI#1M,DISP=(OLD,PASS)
 //GO.PI    DD DSN=WEGSCD.PI#1M,DISP=(OLD,PASS)
 //******
-//XPCTBAD EXEC PGM=PICOMPR
+//XPCTBAD EXEC PGM=PICOMPR,COND=(0,NE)
 //STEPLIB   DD DSN=WEGSCD.LINKLIB,DISP=SHR
 //SYSPRINT  DD SYSOUT=*
 //SYSTERM   DD SYSOUT=*

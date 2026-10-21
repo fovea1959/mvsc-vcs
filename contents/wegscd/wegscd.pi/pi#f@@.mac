@@ -1,14 +1,16 @@
 C     ARRSIZ = (10 * 'desired digits') div 3
-      INTEGER ARRSIZ/SS/
-      INTEGER I, J, K, N, Q, X, NINES, PREDIG
-      INTEGER A(SS)
+#ifdef _NDIGITS
+#define _ARRSIZ eval(_NDIGITS*10/3)
+#else
+#error you forgot to define _NDIGITS
+#endif
 C
-      REAL FDECML
+      INTEGER ARRSIZ/_ARRSIZ/, N/_NDIGITS/
+      INTEGER I, J, K, Q, X, NINES, PREDIG
+      INTEGER A(_ARRSIZ)
 C
-      FDECML = ARRSIZ * 3.0 / 10.0
-      N = FDECML
-      WRITE (7, 8888) ARRSIZ, FDECML, N
-8888  FORMAT(9HARRSIZ = , I7, 10H DIGITS = , F10.1, I7)
+      NAMELIST /PARMS/ N, ARRSIZ
+      WRITE (6, PARMS)
 C
       CALL OUTINI
 C
@@ -61,6 +63,7 @@ C       Q IS SOMETHING ELSE
       CALL OUT (PREDIG, 'qp')
       CALL OUTFL
       STOP
+#message got to end of main
       END
       SUBROUTINE OUTINI
       COMMON /OUTBUF/ OI, O
@@ -94,4 +97,5 @@ C
 99    FORMAT (1H , 132A1)
       CALL OUTINI
       RETURN
+#message got to end of file
       END

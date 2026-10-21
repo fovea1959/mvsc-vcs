@@ -1,17 +1,23 @@
       IMPLICIT REAL*4 (A-H, O-Z)
-      DATA IW /1024/
-      DATA IH /1024/
+      INTEGER W /800/, H /600/
 C
-      DATA Y0 /2.0/, Y1 /-2.0/
-      DATA X0 /-2.0/, X1 /2.0/
+      DATA X0 /-2.5/, X1 /1.5/
+      DATA Y0 /1.5/, Y1 /-1.5/
 C
       INTEGER IR(1024), IG(1024), IB(1024)
       INTEGER IIR, IIG, IIB
       INTEGER MAXITR /0/
 C
+      NAMELIST /MBROT/ W, H, X0, X1, Y0, Y1
+      NAMELIST /ONEONE/ IX, IY, CR, CI, IRES, ITER
+C
+      WRITE (8, 9989)
+9989  FORMAT (32H# {jobname:.2}_cl_r4_{jobid}.txt)
+      WRITE(8, MBROT)
+C
       DO 100 I = 1, 1024
        READ(5,9990,END=110) IIR, IIG, IIB
-9990   FORMAT(I3,X,I3,X,I3)
+9990   FORMAT(3I5)
        MAXITR = I
        IR(I) = IIR
        IG(I) = IIG
@@ -33,25 +39,30 @@ C
       XSPAN = ABS(X1-X0)
       YSPAN = ABS(Y1-Y0)
 C
-      WRITE (7, 9999) XS, YS
-9999  FORMAT (29H# {jobname:.2}_cl_r4_{jobid}_
-     X        , E14.8, 1H_, E14.8, 4H.PPM)
-      WRITE (7, 9998) IW, IH
+      WRITE (7, 9999)
+9999  FORMAT (32H# {jobname:.2}_cl_r4_{jobid}.ppm)
+      WRITE (7, 9998) W, H
 9998  FORMAT (2HP3, 2I5, 5H  256)
 C
-      DO 1000 IY = 1, IH
-       CI = YS - ((IY-1)*YSPAN/IH)
+      DO 1000 IY = 1, H
+       CI = YS - ((IY-1)*YSPAN/H)
 C
-       DO 500 IX = 1, IW
-        CR = XS + ((IX-1)*YSPAN/IW)
+       DO 500 IX = 1, W
+        CR = XS + ((IX-1)*XSPAN/W)
         IRES = IMAND (CR, CI, ITER, MAXITR)
+        IF (IX .NE. 1 .OR. IY .NE. 1) GOTO 405
+C        WRITE(8, ONEONE)
+C        WRITE(8, 5656) IRES, ITER
+5656     FORMAT(5HIRES=, I7, 7H, ITER=, I7)
+405     CONTINUE
         IF (IRES .GT. 0) GOTO 410
 C        not in the set, so color it
-         WRITE (7, 9997) IR(ITER), IG(ITER),IB(ITER)
+         WRITE (7, 9997) IR(ITER), IG(ITER), IB(ITER)
 9997     FORMAT (3I5)
         GOTO 420
+410     CONTINUE
 C        in the set. it gets black
-410      WRITE (7, 9996)
+         WRITE (7, 9996)
 9996     FORMAT (5H0 0 0)
 420     CONTINUE
 500    CONTINUE
@@ -76,6 +87,7 @@ C     non zero return value means in set
        IF (ZRSQR + ZISQR .LT. 4.0) GOTO 90
         IMAND = 0
         ITER = I
+        IF (I .EQ. 1) ITER = 2
         RETURN
 90     CONTINUE
 100   CONTINUE

@@ -17,7 +17,7 @@
 //             DISP=(NEW,CATLG,DELETE)
 //*
 //*
-//CPP     EXEC PPSRC,M='PI#F@@',P='-DSS=30000'
+//CPP     EXEC PIFPP,M='PI#F@@',P='-D_NDIGITS=9000'
 //SRCOUT    DD DSN=&PPSRC,DISP=(NEW,PASS),
 //             UNIT=3350,SPACE=(TRK,(10,10),RLSE),
 //             DCB=(RECFM=FB,LRECL=80,BLKSIZE=19040)
