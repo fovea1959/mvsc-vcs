@@ -1,0 +1,6 @@
+//WEGSCDTS JOB (001),'TSO',CLASS=A,MSGCLASS=X
+//        EXEC PGM=IKJEFT01
+//SYSTSPRT  DD SYSOUT=*                                     ,
+//SYSTSIN   DD *
+VTOC TK5001
+/*

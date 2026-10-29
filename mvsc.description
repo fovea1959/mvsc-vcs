@@ -5,6 +5,9 @@ mvscus:mvscus.asm
 mvscus:mvscus.cntl
 mvscus:mvscus.parmlib
 mvscus:mvscus.sys2.proclib
+mvscus:mvscus.sed.asm
+mvscus:mvscus.sed.asmgood
+mvscus:mvscus.sed.jcl
 wegscd:wegscd.bottles
 wegscd:wegscd.clist
 wegscd:wegscd.cntl

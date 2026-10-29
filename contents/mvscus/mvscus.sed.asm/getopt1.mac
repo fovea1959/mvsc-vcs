@@ -1,0 +1,75 @@
+ TITLE '/home/wegscd/sed-3.02_c2asm370/sed-3.02/lib/getopt1.c'
+         COPY  PDPTOP
+         CSECT
+* Program text area
+         DS    0F
+         EJECT
+* external function 'go_long' prologue
+* frame base=88, local stack=0, call args=24
+&FUNC    SETC  'go_long'
+GO@LONG  PDPPRLG CINDEX=0,FRAME=112,BASER=12,ENTRY=YES
+         B     @@FEN0
+         LTORG
+@@FEN0   EQU   *
+         DROP  12
+         BALR  12,0
+         USING *,12
+@@PG0    EQU   *
+         LR    11,1
+         L     10,=A(@@PGT0)
+* Function 'go_long' code
+         MVC   88(4,13),0(11)
+         MVC   92(4,13),4(11)
+         MVC   96(4,13),8(11)
+         MVC   100(4,13),12(11)
+         MVC   104(4,13),16(11)
+         MVC   108(4,13),=F'0'
+         LA    1,88(,13)
+         L     15,=V(@GO@INTE)
+         BALR  14,15
+         LR    2,15
+         LR    15,2
+* Function 'go_long' epilogue
+         PDPEPIL
+* Function 'go_long' literal pool
+         DS    0D
+         LTORG
+* Function 'go_long' page table
+@@PGT0   DS    0F
+         DC    A(@@PG0)
+         DS    0F
+         EJECT
+* external function 'go_longo' prologue
+* frame base=88, local stack=0, call args=24
+&FUNC    SETC  'go_longo'
+GO@LONGO PDPPRLG CINDEX=1,FRAME=112,BASER=12,ENTRY=YES
+         B     @@FEN1
+         LTORG
+@@FEN1   EQU   *
+         DROP  12
+         BALR  12,0
+         USING *,12
+@@PG1    EQU   *
+         LR    11,1
+         L     10,=A(@@PGT1)
+* Function 'go_longo' code
+         MVC   88(4,13),0(11)
+         MVC   92(4,13),4(11)
+         MVC   96(4,13),8(11)
+         MVC   100(4,13),12(11)
+         MVC   104(4,13),16(11)
+         MVC   108(4,13),=F'1'
+         LA    1,88(,13)
+         L     15,=V(@GO@INTE)
+         BALR  14,15
+         LR    2,15
+         LR    15,2
+* Function 'go_longo' epilogue
+         PDPEPIL
+* Function 'go_longo' literal pool
+         DS    0D
+         LTORG
+* Function 'go_longo' page table
+@@PGT1   DS    0F
+         DC    A(@@PG1)
+         END

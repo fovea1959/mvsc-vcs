@@ -1,0 +1,99 @@
+//WEGSCDOT JOB (001),'TEST OBJLIB',
+//             CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1)
+//*------------------------------------------------------------------*
+//        EXEC FORTGCLG,
+//             REGION.FORT=384K,PARM.FORT='SOURCE',
+//             PARM.LKED=MAP
+//FORT.SYSIN DD *
+      CALL ADDEM(1.5, 2.5, X)
+      WRITE (6, 10) X
+   10 FORMAT(1X, F8.2)
+      STOP
+      END
+/*
+//LKED.MYLIB DD DSN=WEGSCD.OBJ,DISP=SHR
+//LKED.SYSIN DD *
+ INCLUDE MYLIB(ADDEM)
+/*
+//GO.FT06F001 DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC FORTGCLG,
+//             REGION.FORT=384K,PARM.FORT='SOURCE',
+//             PARM.LKED=MAP
+//FORT.SYSIN DD *
+      INTEGER IFORTY
+      II = IFORTY(0)
+      WRITE (6, 10) II
+   10 FORMAT(1X, I8)
+      STOP
+      END
+/*
+//LKED.MYLIB DD DSN=WEGSCD.OBJ,DISP=SHR
+//LKED.SYSIN DD *
+ INCLUDE MYLIB(IFORTY)
+//GO.FT06F001 DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC FORTGCLG,
+//             REGION.FORT=384K,PARM.FORT='SOURCE',
+//             PARM.LKED=MAP
+//FORT.SYSIN DD *
+      INTEGER TIME
+      NAMELIST /T/ II
+      II = TIME(0)
+      WRITE (6, T)
+C     PAUSE 1111
+      II = TIME(0)
+      WRITE (6, T)
+      STOP
+      END
+/*
+//LKED.MYLIB DD DSN=WEGSCD.OBJ,DISP=SHR
+//LKED.SYSIN DD *
+ INCLUDE MYLIB(TIME)
+/*
+//GO.FT06F001 DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC FORTGCLG,
+//             REGION.FORT=384K,PARM.FORT='SOURCE',
+//             PARM.LKED=MAP
+//FORT.SYSIN DD *
+      REAL*8 I, J, K
+      CALL TIDATE(I, J, K)
+      WRITE (6, 9999) I, J, K
+9999  FORMAT(1H , Z16, 1X, Z16, 1X, Z16)
+      WRITE (6, 9998) I, J, K
+9998  FORMAT(1H , A8, 1X, A5, 1X, A6)
+      PAUSE 1111
+      DO 20 L = 1, 100
+        DO 10 M = 1, 10000
+          XM = M
+          S = SQRT(XM)
+10      CONTINUE
+20    CONTINUE
+      WRITE (6, 9999) I, J, K
+      WRITE (6, 9998) I, J, K
+      STOP
+      END
+/*
+//LKED.MYLIB DD DSN=WEGSCD.OBJ,DISP=SHR
+//LKED.SYSIN DD *
+ INCLUDE MYLIB(TIMEDATE)
+/*
+//GO.FT06F001 DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC FORTGCLG,
+//             REGION.FORT=384K,PARM.FORT='SOURCE',
+//             PARM.LKED=MAP
+//FORT.SYSIN DD *
+      LOGICAL*1 JJ(8)
+      CALL JOBNAM(JJ)
+      WRITE (6, 9999) JJ
+9999  FORMAT(8H JOBNAM=, 8A1)
+      STOP
+      END
+/*
+//LKED.MYLIB DD DSN=WEGSCD.OBJ,DISP=SHR
+//LKED.SYSIN DD *
+ INCLUDE MYLIB(JOBNAM)
+/*
+//GO.FT06F001 DD SYSOUT=*

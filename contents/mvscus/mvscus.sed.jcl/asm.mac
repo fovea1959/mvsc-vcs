@@ -1,0 +1,47 @@
+//SEDASM   JOB 01,'Assemble SED',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//ASMSED  PROC M=
+//ASM     EXEC PGM=IFOX00,REGION=128K,PARM=DECK
+//SYSLIB    DD DSN=SYS1.MACLIB,DISP=SHR
+//          DD DSN=MVSCUS.C2ASM370.MACLIB,DISP=SHR
+//SYSUT1    DD DSN=&&SYSUT1,UNIT=SYSSQ,SPACE=(1700,(600,100)),
+//             SEP=(SYSLIB)
+//SYSUT2    DD DSN=&&SYSUT2,UNIT=SYSSQ,SPACE=(1700,(300,50)),
+//             SEP=(SYSLIB,SYSUT1)
+//SYSUT3    DD DSN=&&SYSUT3,UNIT=SYSSQ,SPACE=(1700,(300,50))
+//SYSPRINT  DD DUMMY,DCB=BLKSIZE=1089
+//SYSPUNCH  DD DSN=&&OBJSET,UNIT=SYSSQ,SPACE=(80,(1000,200)),
+//             DISP=(MOD,PASS)
+//SYSIN     DD DISP=SHR,DSN=MVSCUS.SED.ASM(&M)
+//*------------------------------------------------------------------*
+//        PEND
+//*------------------------------------------------------------------*
+//        EXEC ASMSED,M=COMPILE
+//        EXEC ASMSED,M=EXECUTE
+//        EXEC ASMSED,M=GETOPT
+//        EXEC ASMSED,M=GETOPT1
+//        EXEC ASMSED,M=REGEX
+//        EXEC ASMSED,M=SED
+//        EXEC ASMSED,M=UTILS
+//*------------------------------------------------------------------*
+//LKED     EXEC PGM=IEWL,PARM='MAP,LIST,SIZE=(999424,65536)'
+//SYSUT1   DD UNIT=SYSALLDA,SPACE=(CYL,(30,10))
+//SYSPRINT DD SYSOUT=*
+//SYSLMOD  DD DSN=MVSCUS.SED.LINKLIB(SED),DISP=SHR
+//SYSLIB   DD DSN=PDPCLIB.NCALIB,DISP=SHR
+//SYSLIN   DD DSN=&&OBJSET,DISP=(OLD,PASS)
+//         DD *
+ ENTRY @@MAIN
+/*
+//*------------------------------------------------------------------*
+//        EXEC PGM=SED,REGION=6144K,PARM='s/good/bad/g'
+//STEPLIB   DD DISP=SHR,DSN=MVSCUS.SED.LINKLIB
+//SYSIN     DD *
+new is good
+new is bad
+new is awful
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//
