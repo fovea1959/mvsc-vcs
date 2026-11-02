@@ -1,0 +1,126 @@
+//NETSOL   JOB (SYSGEN),'SETUP VTAM/TSO',
+//             CLASS=A,MSGCLASS=A,MSGLEVEL=(1,1)
+//* ----------------------------------------------------------------- *
+//* DO NOT RENUMBER THIS DECK!                                        *
+//* ----------------------------------------------------------------- *
+//*
+//* ----------------------------------------------------------------- *
+//* REPLACE NETWORK SOLICITOR SCREEN, Step 1: restore default source  *
+//* ----------------------------------------------------------------- *
+//UPDATE09 EXEC PGM=IEBUPDTE,PARM=NEW
+//SYSPRINT DD  DUMMY
+//SYSUT2   DD  DISP=SHR,DSN=SYS1.MACLIB
+//SYSIN    DD  *
+./ ADD NAME=NETSOL
+//         DD  DSN=SYS1.AMACLIB(NETSOL),DISP=SHR
+//         DD  *
+./ ENDUP
+//* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -UPDATE09
+//*
+//* ----------------------------------------------------------------- *
+//* Step 2, update with changes to screen appearance                  *
+//* ----------------------------------------------------------------- *
+//UPDATE10 EXEC PGM=IEBUPDTE
+//SYSPRINT DD  DUMMY
+//SYSUT1   DD  DISP=SHR,DSN=SYS1.MACLIB
+//SYSUT2   DD  DISP=SHR,DSN=SYS1.MACLIB
+//SYSIN    DD  *
+./ CHANGE NAME=NETSOL
+         CLI   MSGINDEX,X'0C'
+         BNE   EGSKIP
+         MVC   EGDATA(8),NAMEDEV
+         MVC   EGDATA+9(8),APPLID
+         LA    R3,EGMSGLN
+         L     R4,=A(EGMSG)
+*
+         WRITE RPL=(PTRRPL),                                           X
+               OPTCD=(LBT,ERASE),                                      X
+               AREA=(R4),                                              X
+               RECLEN=(R3),                                            X
+               EXIT=WRITEND
+*
+         B     EGOK
+*
+*
+EGSKIP   DS    0H                                 EGSKIP
+EGOK     DS    0H                                 EGOK
+EGMSG    DS    0C                                 EGMSG
+         DC    X'C3'
+*
+ DC X'11',X'C5C3',X'1D',X'E8',X'2842F5'
+ DC C'XM     MM VV     VV  SSSSSS           //    TTTTTTTT  SSSSSS   '
+ DC C'OOOOOOO '
+*
+ DC X'11',X'C6D3',X'1D',X'E8'
+ DC C'MMM   MMM VV     VV SS    SS         //        TT    SS    SS O'
+ DC C'O     OO'
+*
+ DC X'11',X'C7E3',X'1D',X'E8'
+ DC C'MMMM MMMM VV     VV SS              //         TT    SS       O'
+ DC C'O     OO'
+*
+ DC X'11',X'C8F3',X'1D',X'E8'
+ DC C'MM MMM MM VV     VV  SSSSSS        //          TT     SSSSSS  O'
+ DC C'O     OO'
+*
+ DC X'11',X'4AC3',X'1D',X'E8'
+ DC C'MM  M  MM  VV   VV     SSSS       //           TT       SSSS  O'
+ DC C'O     OO'
+*
+ DC X'11',X'4BD3',X'1D',X'E8'
+ DC C'MM     MM  VV   VV        SS     //            TT          SS O'
+ DC C'O     OO'
+*
+ DC X'11',X'4CE3',X'1D',X'E8'
+ DC C'MM     MM   VV VV   SS    SS    //             TT    SS    SS O'
+ DC C'O     OO'
+*
+ DC X'11',X'4DF3',X'1D',X'E8'
+ DC C'MM     MM    VVV     SSSSSS    //              TT     SSSSSS   '
+ DC C'OOOOOOO '
+*
+ DC X'11',X'D27B',X'1DF0',X'284100',X'2842F4'
+ DC C'Welcome to MVS3.8j, running under the Hercules emulator'
+ DC X'1DF0',X'284200'
+*
+*
+*
+*
+*
+ DC X'11',X'5B60',X'1D',X'E8'
+ DC C'TSO Logon ===>'
+ DC X'1D',X'C1'
+ DC X'13'
+EGDATA DC CL8' ',C' ',CL8' '
+EGMSGLN  EQU   *-EGMSG
+//* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -UPDATE10
+//*
+//* ----------------------------------------------------------------- *
+//* Step 3: assemble and link-edit new NETSOL                         *
+//* ----------------------------------------------------------------- *
+//*
+//ASM11    EXEC PGM=IFOX00,REGION=1024K,
+//             PARM='LINECOUNT(49),TERM'
+//SYSLIB   DD  DISP=SHR,DSN=SYS1.MACLIB
+//         DD  DISP=SHR,DSN=SYS1.AMODGEN
+//SYSUT1   DD  UNIT=SYSDA,SPACE=(1700,(600,100))
+//SYSUT2   DD  UNIT=SYSDA,SPACE=(1700,(300,50))
+//SYSUT3   DD  UNIT=SYSDA,SPACE=(1700,(300,50))
+//SYSTERM  DD  SYSOUT=*
+//SYSPRINT DD  SYSOUT=*,DCB=BLKSIZE=1089
+//SYSPUNCH DD  DSN=&&A,DISP=(NEW,PASS,DELETE),
+//             UNIT=3350,SPACE=(TRK,(2,2)),
+//             DCB=(BLKSIZE=80,LRECL=80,RECFM=F)
+//SYSIN    DD  *
+ISTNSC00 CSECT ,
+         NETSOL SYSTEM=VS2
+         END   ,
+//* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ASM11
+//*
+//LKED12   EXEC PGM=IEWL,PARM='XREF,LIST,LET,NCAL',REGION=1024K
+//SYSPRINT DD  SYSOUT=*
+//SYSLIN   DD  DSN=&&A,DISP=(OLD,DELETE,DELETE)
+//SYSLMOD  DD  DISP=SHR,DSN=SYS1.VTAMLIB(ISTNSC00)
+//SYSUT1   DD  UNIT=SYSDA,SPACE=(1024,(200,20))
+//* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -LKED12
+//

@@ -1,0 +1,138 @@
+//********************************************************************
+//*
+//* NAME: TK5.ASM($$$INDEX)
+//*
+//* Desc: Short index of members in this PDS with sources
+//*       The jobs for assembly and link are in TK5.CNTL
+//*       The membernames can be recognized with the name
+//*       of the source member in this library suffixed with '$'
+//*
+//* Last Update: 2026/02/10 13:49
+//*
+//********************************************************************
+//*
+=======================================================================
+Membername Short description                               ×Remarks   ×
+---------- ------------------------------------------------------------
+$$$INDEX   THIS member, you are reading it                 ×          ×
+AFPCNTRL   Switch additional floating point (AFP)          ×          ×
+           registers on or off.                            ×          ×
+AUTO       This routine provides for job submission and    ×          ×
+           automatic commands in an MVS/JES2 environment.  ×          ×
+AUPGM      AUPGM, authorized version of DOPROG/DOPGM TSO   ×          ×
+           command                                         ×          ×
+AUPGMUPD   IEBUPDTE input to add RAKF support in AUPGM     ×          ×
+BLKDISK    Calculate optimal blksize for different kind    ×BLKdev e.g×
+           of devices: 2314,3330,3330-1,3340,3350,3380,    × BLK3390  ×
+           3390 and 9345                                   ×          ×
+BLKSPTRK   Physical blocks per DASD track calculater       ×          ×
+BYPASCRN   SVC Screening routine                           ×          ×
+BYPASSNQ   SCRATCH/RENAME a data set without ENQ           ×+BYPASUPD ×
+CBMACSMV   Mapping macros control blocks for LOOKMVS       × LOOKMVS  ×
+CDSCB      Alters the contents of a Format 1 DSCB          ×APF with  ×
+           in a VTOC. APF authorization and OPER privilege ×TSOEXEC   ×
+           of the TSO user is required.                    ×          ×
+CHECKMOD   Check for presence of a load module             ×          ×
+CLEANPDS   Make a PDS empty and/or add directory blocks    ×          ×
+           without need to re-allocate and compress.       ×          ×
+CLRSCRN    Clear TSO screen no matter wat scrsize is       ×          ×
+COMPRESS   TSO command to compress a partitioned data set  ×          ×
+COPYPDS    This TSO command copies a partitioned data set, ×          ×
+           using the IEBCOPY utility program.              ×          ×
+C3270**    CLIST Communication Routine for 3270 Terminals  ×          ×
+DATE       Display Gregorian date, Julian date and time    ×          ×
+DDUX       TSO command to display disk records             ×FILE(X)   ×
+           allocate temporary dataset with FILE(X)         ×          ×
+DDUVOLX    Clone of DDUX                                   ×          ×
+DENQ       Display ENQs of a specific QNAME/RNAME combi.   ×          ×
+DEX        Execute hex and/or decimal arithmetic           ×          ×
+           calculations (Add/Subtract/Multiply/Divide)     ×          ×
+DISKMAP    Print a map of a chosen volume                  ×          ×
+DISPLAY    Display system information. Alias is DS.        ×          ×
+DOPROG     TSO command processor to load and execute a     ×          ×
+           program. Command name = DOPGM                   ×          ×
+DSAT       Display data sets and their attribytes          ×          ×
+DSN        Find out which users are holding a specified    ×DENQ      ×
+           data set (see member DENQ)                      ×          ×
+DSPACE     List free space of a single volume or a         ×          ×
+           volume list.                                    ×          ×
+DSVC       Display the SVC table.                          ×          ×
+DT         Display active TSO users                        ×          ×
+DUPTIME    Display system's uptime since last IPL.         ×          ×
+DVOL       List attributes of 1 or more DASD volumes.      ×          ×
+ETPS****   EMERGENCY TELE-PROCESSING SERVICES              ×          ×
+           If TSO, VTAM or JES2 is not available           ×          ×
+FILLDASD   Fill free DASD space with binary zeroes         ×          ×
+FREEALL    Free dynamically allocated datasets. Alias=FA.  ×          ×
+HELP       HELP wrapper: Call TSO HELP or FSH as           ×          ×
+           appropiate.                                     ×          ×
+INSTREAM   This TSO command copies the input stream        ×          ×
+           following it into a dataset. The user is        ×          ×
+           placed in a 'INSTREAM'                          ×          ×
+JRPUPDT    Update JRP with IEBUPDTE                        ×          ×
+LETTERS    Changes CRT screen sizes without requiring      ×          ×
+           entering the RESET + CLEAR keys                 ×          ×
+LISTCDS    TSO command to list MOD, LMOD, SYSMOD, MAC,     ×          ×
+           SRC and SYSTEM entries in the SMPCDS.           ×          ×
+LISTLPA    TSO command processor to list the LPA           ×          ×
+LISTSPC    List the space of a data set or data set list   ×          ×
+LISTVOL    List attributes all online DASD volumes         ×          ×
+LISTVTOC   TSO command processor LISTVTOC.                 ×          ×
+LOOKMVS    Fullscreen TSO command to display storage       ×+CBMACSMV ×
+OFFLOAD    Offload a card image PDS to IEBUPDTE or         ×          ×
+           PDSLOAD sequential dataset. Need EXH.COLEMAC    ×          ×
+PARMSCAN   Module to scan the parm in the EXEC statment    ×subroutine×
+PDSLOAD    Load IEBUPDTE or OFFLOAD dataset into a PDS     ×          ×
+PDSUPDTE   Update strings in an entire partitioned dataset ×          ×
+PRINTON    TSO command to print data sets or members.      ×          ×
+           Alias is LIST                                   ×          ×
+RELEASE    Release unused space from a dataset. Alias=RLSE ×          ×
+RELOGON    Re LOGON with the same userid, without entering ×          ×
+           the password.                                   ×          ×
+RUNZ9      Belongs to SIMZ9                                × SIMZ9    ×
+SHOWDS     TSO command processor to show dataset attributes×          ×
+SHOWSS     TSO command processor to show subsystems        ×+SHSSUPD  ×
+SIMZ9      z9 Series Instruction Simulator                 ×          ×
+           uses the following macros in SYS2.MACLIB        ×          ×
+           1. ENTER                                        ×          ×
+           2. FINISH                                       ×          ×
+           3. ICATCHER                                     ×          ×
+           4. IEZBITS                                      ×          ×
+           5. IEZREGS                                      ×          ×
+           6. IHAPIE                                       ×          ×
+           7. MODULEID                                     ×          ×
+SNASOL     Network solicitor for VTAM                      ×          ×
+SPFCOPY    Execute IEBCOPY in an unauthorized environment. ×          ×
+           SPFCOPY is linked from COMPRESS and COPYPDS.    ×          ×
+SPY        TSO full screen display of 3270 system console  ×          ×
+           screen.                                         ×          ×
+STEPLIB    Dynamically concatenate a load library into the ×          ×
+           STEPLIB. Needs STEPLUPD                         ×          ×
+SVC244     Toggle authorization                            ×          ×
+SYSTEM     TSO command processor to display system info    ×          ×
+TAPEMAP    List contents of a tape. Including JCL stream   ×          ×
+TCBUVTAM   Macro belongs to ETPS                           × ETPS     ×
+TESTZ9     Test and Demonstrate z9 Opcode Simulations      × SIMZ9    ×
+TSTVTAM2   Test VTAM application                           ×          ×
+TSO        Execute TSO commands in the READY prompt, like  ×          ×
+           ISPF.                                           ×          ×
+TSOEXEC    TSO command processor to run authorized TSO     ×          ×
+           commands in a non-authorized environment.       ×          ×
+TSOUSER    TSO command processor to display active users   ×          ×
+TSSO       TSO Subsystem for operator consoles             ×          ×
+TSSOEF     Edit File (EF) command of TSSO                  ×          ×
+TSSOGIDE   TSSO user's Guide, copied to SYS2.HELP          ×          ×
+TSSOSSSM   TSSO Subsystem Support module                   ×          ×
+TSSOSTCK   TSSO Stack command                              ×          ×
+TSSOUPSS   Set SSCTUPSS bit on and start TSSO              ×          ×
+TSSOWTO    This program reads a dataset and writes every   ×          ×
+           record on the operator's console.               ×          ×
+TSTVS***   Emergency subsystem EDIT, See EDIT User's guide ×          ×
+ULXL01     ISPF dialog to display free space of a volume.  ×          ×
+           It's a part of ISPF 3.7 (option X)              ×          ×
+UNITS      TSO command to display UNIT esoteric- and       ×          ×
+           generic names.                                  ×          ×
+USERMODD   Program to make a PDF file with the contents    ×          ×
+           of the coverletters of the USERMOD.* libraries  ×          ×
+VOLMAP     Print a physical map of a DASD volume           ×          ×
+VTOC       VTOC command processor. Including JCL stream    ×          ×

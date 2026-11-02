@@ -1,0 +1,1033 @@
+         TITLE 'LOOKMVS --   Storage display'
+*
+*        Modified by Rob Prins.
+*
+*        This is the modified LOOK program from file060 of
+*        CBT249. The TERMIO modules are deleted and a 3270 screen
+*        is created instead.
+*        Module CBMACSMV is used to format some control blocks.
+*        Include this module into the link edit of LOOKMVS.
+*
+*        This program is renamed into LOOKMVS with alias LOOK
+*
+*        Commands:
+*        1 hhhh      = specify a HEX address
+*        2 +/- nnnn  = Add/Subtrace "nnnn" from current address
+*        3 Ocb       = display a control block (e.g. OCVT)
+*       3a ONULL     = display control block in DUMP mode
+*        4 =name     = Assign name to storage address
+*        5 ,name     = Refer back to storage address assigned
+*        6 Lcbfld    = Link to field 'cbfld' in control block
+*        7 >         = Next command in history
+*        8 <         = Previous command in history
+*        9 M0/M1     = Flip between top- and centered mode
+*
+*        Attributes: RENT,REUS,AC=1
+*
+*        Change log:
+*        03 feb 2022 RPr: add MODESET to get fetch protected storage
+*        18 feb 2022 RPr: SPIE replaced by ESTAE, because ABEND0C4
+*                         with IRC 10 or 11 is not protected
+*
+         MACRO
+&N       HEX   &TO,&FROM
+&N       UNPK  TEMP1(9),&FROM.(5,R6)
+         MVC   &TO.(8,R4),TEMP1
+         TR    &TO.(8,R4),HEXTAB
+         MEND
+LOOKMVS  CSECT
+*  INITIALIZE THE PROGRAM
+         SAVE  (14,12),,*
+         LR    R12,R15                 First base register
+         USING LOOKMVS,R12,R11
+         LA    R11,2048(R12)           Second base register
+         LA    R11,2048(R11)
+         GETMAIN R,LV=WORKLEN,SP=1     Obtain working storage
+         ST    R13,4(,R1)              Backward pointer
+         ST    R1,8(,R13)              Forward pointer
+         LR    R13,R1                  Our save area = first 72 bytes
+         LR    R2,R1                   Working storage start
+         LA    R2,72(,R2)              Do not clear save area
+         L     R3,=A(WORKLEN-72)       Length to clear
+         SR    R5,R5                   Length 2 = zero, pad = zero
+         MVCL  R2,R4                   Clear entire working storage
+         USING WORKAREA,R13
+*
+*        Test if Jobstep (TSO) is APF authorized and set flag.
+*
+         USING PSA,R0
+         L     R1,PSATOLD              Point to current TCB
+         USING TCB,R1
+         ICM   R1,7,TCBJSTCA           Point to jobstep TCB
+         ICM   R1,7,TCBJSCBB           Point to JSCB
+         DROP  R0,R1                   PSA and TCB
+         USING IEZJSCB,R1
+         TM    JSCBOPTS,JSCBAUTH       Are we APF authorized?
+         BZ    NOAPF                   No: carry
+         OI    FLAGS,$APF              Mark APF authorized
+         DROP  R1                      JSCB
+NOAPF    DS    0H
+         LA    R2,IOAREA               START OF IO BUFFER
+         LA    R3,SCR1LEN              SIZE OF IO BUFFER
+         LR    R5,R3                   SIZE OF IO BUFFER
+         L     R4,=V(SCR1)             INPUT
+         MVCL  R2,R4                   COPY THE IO BUFFER
+         LA    R8,IOAREA               IO BUFFER
+         USING SCR1,R8
+         EJECT
+***********************************************************************
+*
+*   INPUT SCAN
+*
+***********************************************************************
+         SPACE 2
+ISCAN    MVC   INPSAVE,INPLINE         SAVE LAST USER INPUT
+ISCAN2   LA    R3,INPLINE              POINT TO START OF INPUT
+         LA    R1,SCANTAB              COMMAND TABLE
+         NI    FLAGS,255-INDFLAG       TURN OFF INDIRECT FLAG
+SCANLOOP L     R2,0(,R1)               GET TABLE ENTRY
+         CLM   R2,8,ENDTAB             SEE IF END OF TABLE
+         BE    NUMSCAN                 IF YES, ASSUME NUMERIC INPUT
+         CLM   R2,8,INPLINE            SEE IF COMMAND FOUND
+         BER   R2                      IF YES, GO TO COMM ROUINE
+         LA    R1,4(R1)                NEXT ENTRY ADDRESS
+         B     SCANLOOP
+SCANTAB  DS    0F                      COMMAND TABLE
+         DC    C' ',AL3(FORMAT)
+         DC    C'I',AL3(INDIR)
+         DC    C'>',AL3(FWD)
+         DC    C'<',AL3(BACK)
+         DC    C'=',AL3(DEFINE)
+         DC    C',',AL3(NUMSCAN)
+         DC    C'M',AL3(MODE)
+         DC    C'L',AL3(LINK)
+         DC    C'O',AL3(OVERLAY)
+ENDTAB   DC    X'FF'                   END OF TABLE INDICATOR
+         SPACE 2
+***********************************************************************
+*
+*     FORMAT THE OUTPUT SCREEN
+*
+***********************************************************************
+         SPACE 2
+FORMAT   LA    R3,INPLINE              CURSOR ADDRESS
+         MVC   INPLINE,BLANKS          CLEAR INPUT LINE
+FORMAT2  LH    R2,CURRENT              HISTORY TABLE POINTER
+         L     R4,HISTORY(R2)          GET ADDRESS TO DISPLAY
+         BAL   R14,ERASE               CLEAR THE SCREEN
+         SR    R5,R5                   CLEAR FOR IC
+         IC    R5,HISTORY+4(R2)        GET DISPLAY FORMAT FROM HIST TAB
+         B     *+4(R5)                 GO TO DISPLAY ROUTINE
+         B     DUMP                    DUMP FORMAT IS STANDARD
+         B     CBHIT                   CB MAP IN USE
+         B     NOCB                    SUPPRESS CB USAGE
+* NO CODE ABOVE 8 IN USE NOW
+* TRY TO LOCATE A CONTROL BLOCK FORMAT
+DUMP     L     R5,=V(CBMACSMV)         GET START OF INDEX
+DUMPCB   CLI   0(R5),X'FF'             SEE IF END OF INDEX
+         BE    NOCB                    IF YES, NO CB FOUND
+         L     R2,4(,R5)               GET CB IDENTIFIER OFFSET
+         AR    R2,R4                   ADD DISPLAY ADDRESS
+         LA    R0,4                    LENGTH TO FETCH
+         LA    R1,DUMPDATA             To contain 256 bytes storage
+         BAL   R14,GETSTOR             FETCH THE DATA
+         CLC   0(4,R5),DUMPDATA        SEE IF IDENTIFIER MATCH
+         BE    CBHIT                   BR IF YES, CB WAS FOUND
+         LA    R5,12(,R5)              NEXT INDEX ENTRY
+         B     DUMPCB                  AND CHECK FOR MORE CB'S
+*
+*        If no control block to be shown, use the dump format
+*
+NOCB     LR    R2,R4                   COPY ADDR TO DISPLAY
+         TM    MODEFLAG,ALIGN          QUADWORD ALIGNMENT WANTED
+         BZ    DUMPNOA                 BR IF NOT
+         N     R2,=XL4'FFFFFFF0'       ROUND DOWN FOR DISPLAY
+DUMPNOA  TM    MODEFLAG,MIDDUMP        PUT ADDR INCENTER OF SCREEN?
+         BZ    DUMPNOM                 BR IF NOT
+         SH    R2,=H'128'              IF YES, BACK UP QUAD WORDS
+*
+*        The address of the dump data to be displayed is in register 2
+*
+DUMPNOM  LA    R0,256                  LENGTH TO FETCH
+         LA    R1,DUMPDATA             TARGET ADDRESS
+         BAL   R14,GETSTOR             GO FETCH THE DATA
+         LA    R6,DUMPDATA             POINT TO DATA TO DISPLAY
+         LA    R4,OUT1                 FIRST OUTPUT LINE ADDR
+         LA    R5,16                   NO. OF LINES TO DISPLAY
+DUMPLOOP EQU   *                       FORMAT THE DISPLAY
+         STCM  R2,07,TEMP2             ADDRESS TO SHOW
+         UNPK  TEMP1(7),TEMP2(4)       CONVERT BINARY TO HEX
+         MVC   0(6,R4),TEMP1
+         TR    0(6,R4),HEXTAB
+         HEX   10,0                    CONVERT FIRST WORD TO HEX
+         HEX   20,4                    SECOND WORD TO HEX
+         HEX   30,8                    THIRD WORD
+         HEX   40,12                   FOURTH AND LAST WORD TO HEX
+         MVI   50(R4),C'*'             FRAME THE EBCDIC DISPLAY
+         MVI   67(R4),C'*'             FRAME THE OTHER SIDE
+         MVC   51(16,R4),0(R6)         COPY THE EBCDIC DATA
+         TR    51(16,R4),VALCHAR       DELETE INVALID CHARS
+         LA    R2,16(,R2)              NEXT LINE ADDR
+         LA    R6,16(,R6)              NEXT DATA AREA
+         LA    R4,80(,R4)              NEXT OUTPUT LINE
+         BCT   R5,DUMPLOOP             GO DO NEXT LINE
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* NOW BLANK OUT THE SCREEN WHERE THE PAGE DIDN'T EXIST
+*
+*----------------------------------------------------------------------
+         SPACE 2
+         LA    R4,OUT1                 POINT TO FIRST OUTPUT LINE
+         SH    R2,=H'256'              FIRST ADDRESS DISPLAYED
+         LA    R5,16                   NUMBER OF LINES DISPLAYED
+BLLOOP   LA    R15,15(,R2)             LAST ADDRESS ON CURRENT LINE
+         CLM   R2,7,LOGOOD+1           IS BEGINNING OF LINE OK
+         BNL   LOWOK                   BR IF OK
+         CLM   R15,7,HIGOOD+1          IS HIGH END OK
+         BNH   HIMIX                   BR IF LOW BAD, HI OK
+* BOTH LOW AND HIGH MISSING -- BLANK ENTIRE LINE
+         MVI   10(R4),C' '             START OF DATA
+         MVC   11(57,R4),10(R4)        CLEAR THE LINE
+         B     BLOOPEND                GO CHECK ANOTHER LINE
+* BR HERE IF LOW END GOOD, HIGH MAY BE  MISSING
+LOWOK    C     R15,HIGOOD              IS HIGH END OK
+         BNH   BLOOPEND                BR IF YES, LINE IS GOOD
+* FALL THRU IF LOW END OK, HIGH END BAD
+         S     R15,HIGOOD              # OF BYTES TO BLANK
+* THE FOLLOWING CODE TAKES CARE OF LOW STORAGE WRAP
+         CH    R15,=H'15'              MORE THAN 15 BYTES TO CLEAR
+         BH    BLOOPEND                IF YES, IT WRAPPED, NO CLEAR
+         LR    R1,R15                  COPY # TO BLANK
+         SRL   R1,2                    FIND # OF WORDS
+         SLL   R1,1                    TWO BLANKS PER WORD
+         AR    R1,R15                  ADD NUMBER OF HEX CHARS
+         AR    R1,R15                  WHICH IS TWICE THE # OF BYTES
+         LA    R6,48(,R4)              POINT JUST AFTER HEX DATA
+         SR    R6,R1                   FIRST BYTE TO CLEAR
+         BCTR  R1,0                    REDUCE BY 1 FOR EXEXUTE
+         EX    R1,CLEARMVC             CLEAR HEX SIDE
+         LA    R6,67(,R4)              Point to trailing '*'
+         SR    R6,R15
+         EX    R15,CLEARMVC            CLEAR EBCDIC AND *
+         MVI   0(R6),C'*'              NOTE END OF EBCDIC DATA
+         B     BLOOPEND                GO CHECK NEXT LINE
+* COME HERE WHEN HI END GOOD AND LOW END MISSING
+HIMIX    L     R15,LOGOOD              LOWEST GOOD ADDR
+         SR    R15,R2                  NUMBER OF BYTES TO CLEAR
+         LR    R1,R15                  COPY # TO CLEAR
+         SRL   R1,2                    # OF WORDS TO CLEAR
+         SLL   R1,1                    NUMBER OF IMBEDDED BLANKS
+         AR    R1,R15                  ADD # OF HEX CHARS
+         AR    R1,R15
+         BCTR  R1,0                    REDUCE BY 1 FOR MVC
+         LA    R6,10(,R4)              Start of HEX data
+         EX    R1,CLEARMVC             and clear the HEX data
+         LA    R6,50(,R4)              POINT TO FIRST * ON LINE
+         EX    R15,CLEARMVC            CLEAR * AND EBCDIC DATA
+         LA    R6,50(R4,R6)            POINT TO FIRST CLEARED BYTE
+         MVI   0(R6),C'*'              AND DROP IN A *
+BLOOPEND LA    R4,80(,R4)              POINT TO NEXT LINE
+         LA    R2,16(,R2)              ADDRESS ON NEXT LINE
+         BCT   R5,BLLOOP               AND SCAN ALL LINES
+         SPACE 2
+*----------------------------------------------------------------------
+*
+*  PUT IN ARROWS TO POINT TO DESIRED DATA
+*
+*----------------------------------------------------------------------
+         SPACE 2
+         LA    R4,OUT1                 ADDR OF FIRST LINE
+         TM    MODEFLAG,MIDDUMP        DOES IT BELONG IN THE MIDDLE
+         BZ    ARRTOP                  BR IF NOT
+         LA    R4,OUT9                 POINT TO MIDDLE LINE
+ARRTOP   SR    R1,R1                   ASSUME NO QUADWORD ALIGNMENT
+         TM    MODEFLAG,ALIGN          WAS ASSUMPTION CORRECT
+         BZ    ARRALIGN                BR IF YES, ELSE GET OFFSET
+         LA    R1,15                   MASK FOR LOW 4 BITS
+         NR    R1,R2                   GET BYTE OFFSET FOR ARROW
+* FIRST DO THE EBCDIC SIDE
+ARRALIGN LA    R15,49(,R4)             BYTE BEFORE FIRST *
+         EX    R1,MOVEMVC              MOVE THE DATA BACK
+         AR    R15,R1                  ADDR OF LAST BYTE MOVED
+         MVI   1(R15),C'>'             PUT IN THE ARROW
+* NOW MOVE THE HEX SIDE
+         SR    R0,R0                   CLEAR HIGH ORDER BITS
+         SLDL  R0,30                   WHICH WORD IS TO BE MOVED
+         SRL   R1,30                   NUMBER OF BYTES TO BE MOVED
+         LR    R15,R0                  COPY OFFSET OF WORD TO MOVE
+         MH    R15,=H'10'              EACH WORD TAKES UP 10 BYTES
+         LA    R15,8(R4,R15)           POINT IN FRONT OF WORD TO MOVE
+         SLL   R1,R1                   NUMBER OF HEX DIGITS TO MOVE
+         EX    R1,MOVEMVC              MOVE THE DATA BACK
+         AR    R15,R1                  POINT TO PALCE FOR ARROW
+         MVI   1(R15),C'>'             AND PUT IT THERE
+* FALL  THRU TO SHOW THE SCREEN
+         EJECT
+* Display the screen and check AID and commands.
+DISPLAY  LA    R2,SCR1LEN              LENGTH
+         MVC   INPLINE,BLANKS          BLANK COMMAND LINE FIRST
+         TPUT  (8),(2),FULLSCR
+         MVC   MSGLINE,BLANKS          Clear error message in screen
+         TGET  BUFFER,L'BUFFER,ASIS
+         CLI   AID,PA1                 PA1 hit?
+         BE    ENDIT                   Yes: exit LOOKMVS
+         CLI   AID,X'F0'               SEE IF MIGHT BE PFK
+         BH    TRYPFK1                 F1-F9 MEAN PFK 1-9
+         CLI   AID,X'7C'               7A-7C ARE PFK 10-12
+         BNH   TRYPFK2                 FALL THRU IF NOT PFK
+NOTPFK   CLI   AID,ENTER               SEE IF ENTER HIT
+         BNE   DISPLAY                 IF NOT, DISPLAY AGAIN
+         MVC   INPLINE,BUFCMD          COPY TO SCREEN BUFFER
+         OC    INPLINE,BLANKS          AND XLATE TO UPPER
+         CLC   =C'END',INPLINE         Command 'END' given?
+         BNE   ISCAN                   No: look for input, Yes: exit
+*
+*        Clean up and exit LOOKMVS
+*
+ENDIT    TPUT  CLEAR,L'CLEAR,FULLSCR   Clear the screen before exit
+         LR    R2,R13                  Save working storage address
+         L     R13,4(,R13)             Caller's save area
+         FREEMAIN R,LV=WORKLEN,SP=1,A=(R2)
+         RETURN (14,12),RC=0
+* PFK HANDLING HERE
+TRYPFK1  CLI   AID,X'F9'               SEE IF WITHIN PFK 1-9
+         BH    NOTPFK                  BR IF NOT
+TRYPFK2  CLI   AID,X'7A'               SEE IF ABOVE FLOOR
+         BL    NOTPFK                  BR IF NOT
+         IC    R15,AID                 GET THE PFK
+         LA    R0,15                   PREPARE TO ISOLATE LOW DIGIT
+         NR    R15,R0
+         SLL   R15,2                   TURN PFK INTO AN INDEX
+         B     *(R15)                  FIRST PFK IS 1
+         B     HELP                    PFK 1 = HELP
+         B     DISPLAY                 IGNORE PFK 2
+         B     ENDIT                   PFK 3 = END
+         B     DISPLAY                 IGNORE PFK 4
+         B     REPEAT                  PFK 5 REPEAT LAST INPUT LINE
+         B     DISPLAY                 IGNORE PFK 6
+         B     UP                      PFK 7 SCROLL UP OR PREV CB SEG
+         B     DOWN                    PFK 8 SCROLL DOWN OR NEXT CB SEG
+         B     DISPLAY                 IGNORE PFK 9
+         B     BACK                    PFK 10 - BACK THRU HISTORY
+         B     FWD                     PFK 11 - FWD  THRU HISTORY
+         B     DISPLAY                 IGNORE PFK 12
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* CBHIT  -- CONTROL BLOCK FORMATTING ROUTINE
+* AT ENTRY:    R3 HAS CURSOR OFFSET
+*              R4 HAS ADDRESS TO DISPLAY
+*              R5 HAS CBINDEX ENTRY ADDRESS
+*
+*----------------------------------------------------------------------
+         SPACE 2
+CBHIT    LH    R2,CURRENT              GET HISTORY TABLE POINTER
+         LA    R2,HISTORY+4(R2)        GET CURRENT SEG FROM HIST TABLE
+         ICM   R6,7,1(R2)              LAST SEGMENT DISPLAYED
+         BNZ   CBHIT2                  BR IF A CONTINUING DISPLAY
+         L     R6,8(,R5)               ELSE GET FIRST SEG ADDRESS
+         STCM  R6,7,1(R2)              AND SAVE FOR LATER
+         MVI   0(R2),4                 NOTE CB FORMAT ROUTINE IN USE
+         USING CBS,R6
+CBHIT2   LH    R0,CBSSIZE              LENGTH TO FETCH
+         LH    R1,DUMPDATA             TARGET ADDRESS
+         LH    R2,CBSFIRST             OFFSET TO FETCH
+         AR    R2,R4                   ADD START OF CB ADDRESS
+         BAL   R14,GETSTOR             GO FETCH THE DATA
+         LA    R5,OUT1                 START OF SCREEN
+         LA    R2,DUMPDATA             POINT TO DATA BUFFER
+CBLOOP   LH    R15,CBSTYPE             GET FORMAT ITEM TYPE
+         B     *+4(R15)                GO TO FORMAT ROUTINE
+         B     DISPLAY                 TYPE 0 END OF SEGMENT
+         B     CBHEX                   TYPE 4 HEX
+         B     CBCONST                 TYPE 8 EBCDIC CONSTANT
+         B     CBEBCD                  TYPE 12 EBCDIC DATA
+         SPACE 2
+* EBCDIC CONSTANT ITEM
+CBCONST  LA    R15,CBSDATA             ADDR OF DATA ITEM
+         LH    R14,CBSLEN              LENGTH FOR MVC
+         LH    R1,CBSOFF               SCREEN OFFSET
+         AR    R1,R5                   ADD START OF SCREEM
+         EX    R14,CBEMVC              MOVE EBCDIC DATA
+         LA    R6,7(R14,R6)            POINT TO NEXT FORMAT ITEM
+         B     CBLOOP
+CBEMVC   MVC   0(0,R1),0(R15)          MOVE EBCDIC DATA
+* EBCDIC DATA ITEM
+CBEBCD   LH    R15,CBSDATA             OFFSET OF DATA TO SHOW
+         AR    R15,R2                  ADD START OF BUFFER
+         LH    R14,CBSLEN              LENGTH TO MOVE
+         LH    R1,CBSOFF               SCREEN OFFSET
+         AR    R1,R5                   ADD START OF SCREEN
+         EX    R14,CBEMVC              MOVE THE DATA
+         LA    R6,8(,R6)               POINT TO NEXT FORMAT ITEM
+         B     CBLOOP
+* HEX DATA ITEM
+CBHEX    LH    R15,CBSDATA             DATA OFFSET
+         AR    R15,R2                  ADD START OF BUFFER
+         UNPK  TEMP1(9),0(5,R15)       UNPACK THE DATA
+         TR    TEMP1(8),HEXTAB         AND CONVERT TO HEX
+         IC    R14,CBSLEN+1            GET MVC LENGTH
+         LH    R1,CBSOFF               GET SCREEN OFFSET
+         AR    R1,R5                   ADD START OF SCREEN
+         LA    R15,TEMP1               FIRST DIGIT UNPACKED
+         TM    CBSLEN,1                SEE IF NEXT DIGIT WANTED
+         BZ    CBHEX2                  BR IF NOT
+         LA    R15,TEMP1+1             ELSE POINT TO NEXT HEX DIGIT
+CBHEX2   EX    R14,CBEMVC              MOVE THE DATA
+         LA    R6,8(,R6)               POINT TO NEXT FORMAT ITEM
+         B     CBLOOP
+         DROP  R6
+         SPACE 2
+***********************************************************************
+*
+* COMMAND ROUTINES
+*
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* OVERLAY  --  MANIPULATE CONTROL BLOCK FORMATTING
+*
+*----------------------------------------------------------------------
+         SPACE 2
+OVERLAY  CLC   =C'NULL',INPLINE+1      SEE IF NO FORMATTING WANTED
+         BE    OVERNULL                BR IF YES
+         L     R5,=V(CBMACSMV)         GET CB MAP INDEX
+OVERLOOP CLI   0(R5),X'FF'             SEE IF END OF INDEX
+         BE    FORMAT                  BR IF YES,IGNORE COMMAND
+         CLC   INPLINE+1(4),0(R5)      SEE IF CB MATCH
+         BE    OVERHIT                 BR IF YES
+         LA    R5,12(,R5)              Else point to next entry
+         B     OVERLOOP                AND KEEP LOOKING
+OVERHIT  LH    R2,CURRENT              CURRENT HIST TABLE ENTRY OFFSET
+         L     R6,8(,R5)               START SEG ADDR FOR CB FOUND
+         ST    R6,HISTORY+4(R2)        PUT IN HISTORY TABLE
+         LA    R2,HISTORY+4(R2)        POINT AT FLAG BYTE IN HIST TABLE
+         MVI   0(R2),4                 NOTE CB FORMAT IN USE
+         B     FORMAT                  GO SHOW IT
+OVERNULL LH    R2,CURRENT              CURRENT HIST TABLE ENTRY OFFSET
+         LA    R2,HISTORY+4(R2)        POINT AT FLAG BYTE IN HIST TABLE
+         MVI   0(R2),8                 SUPPRESS CB OVERLAY
+         B     FORMAT                  GO SHOW STORAGE
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* DOWN -- SCROLL DOWN 256 BYTES OR NEXT CTRL BLK SEGMENT
+*
+*----------------------------------------------------------------------
+         SPACE 2
+DOWN     LH    R2,CURRENT              CURRENT HIST TABLE POINTER
+         LA    R2,HISTORY(R2)          POINT TO HIST TABLE ENTRY
+         CLI   4(R2),4                 SEE IF THIS IS A CB DISPLAY
+         BE    DOWNCB                  BR IF YES
+         L     R1,0(,R2)               ELSE GET ADDR TO SHOW
+         AH    R1,=H'256'              AND MOVE DOWN ONE SCREEN
+         STCM  R1,7,1(R2)              AND REPLACE IN HIST TABLE
+         B     FORMAT                  GO DISPLAY IT
+DOWNCB   L     R1,4(,R2)               GET CB SEGMENT ADDR
+         L     R1,4(,R1)               GET NEXT SEG ADDR
+         STCM  R1,7,5(R2)              AND PUT IN HIST TABLE
+         B     FORMAT                  GO SHOW IT
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* UP   -- SCROLL UP   256 BYTES OR PREV CTRL BLK SEGMENT
+*
+*----------------------------------------------------------------------
+         SPACE 2
+UP       LH    R2,CURRENT              CURRENT HIST TABLE POINTER
+         LA    R2,HISTORY(R2)          POINT TO HIST TABLE ENTRY
+         CLI   4(R2),4                 SEE IF THIS IS A CB DISPLAY
+         BE    UPCB                    BR IF YES
+         L     R1,0(,R2)               ELSE GET ADDR TO SHOW
+         SH    R1,=H'256'              AND MOVE UP ONE SCREEN
+         STCM  R1,7,1(R2)              AND REPLACE IN HIST TABLE
+         B     FORMAT                  GO DISPLAY IT
+UPCB     L     R1,4(,R2)               GET CB SEGMENT ADDR
+         L     R1,0(,R1)               GET PREV SEG ADDR
+         STCM  R1,7,5(R2)              AND PUT IN HIST TABLE
+         B     FORMAT                  GO SHOW IT
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* REPEAT -- REPEAT LAST INPUT LINE
+*
+*----------------------------------------------------------------------
+         SPACE 2
+REPEAT   MVC   INPLINE,INPSAVE         COPY SAVED INPUT
+         B     ISCAN2                  AND PROCESS IT
+         SPACE 2
+*----------------------------------------------------------------------
+*
+* HELP -- Display HELP screen
+*
+*----------------------------------------------------------------------
+         SPACE 2
+HELP     DS    0H
+         BAL   R14,ERASE               Clear screen
+         MVC   OUT1,HELPMSG1           Build
+         MVC   OUT3,HELPMSG2                HELP
+         MVC   OUT5,HELPMSG3                    screen
+         MVC   OUT6,HELPMSG4
+         MVC   OUT7,HELPMSG5
+         MVC   OUT8,HELPMSG6
+         MVC   OUT9,HELPMSG7
+         MVC   OUT10,HELPMSG8
+         MVC   OUT12,HELPMSG9
+         B     DISPLAY
+*----------------------------------------------------------------------
+*
+* LINK -- LINK TO LABELED CONTROL BLOCK FIELD
+*
+*----------------------------------------------------------------------
+         SPACE 2
+LINK     LH    R5,CURRENT              CURRENT HIST TABLE POINTER
+         LA    R5,HISTORY(R5)          POINT TO HIST TABLE ENTRY
+         CLI   4(R5),4                 SEE IF CB FORMATTING IN USE
+         BE    LINK2                   BR IF YES
+LINKERR  MVC   MSGLINE,LINKMSG         NOTE ERROR IN LINK
+         B     FORMAT                  And reshow screen
+LINK2    L     R3,4(,R5)               GET CURRENT CB SEG ADDRESS
+         LR    R4,R3                   SAVE THE START OF SEG ADDR
+         USING CBS,R3
+LINK3    LH    R15,CBSTYPE             GET ITEM TYPE
+         B     *+4(R15)                GO HANDLE ITEM TYPE
+         B     LINKEND                 END OF SEGMENT
+         B     LINKHEX                 HEX ITEM
+         B     LINKCON                 CONSTANT ITEM
+         B     LINKHEX                 EBCD ITEM
+         SPACE
+* HEX    ITEM
+LINKHEX  LA    R3,8(R3)                POINT TO NEXT ITEM
+         B     LINK3                   CHECK NEXT ITEM
+* CONST  ITEM  (A LABEL)
+LINKCON  LH    R14,CBSLEN              GET LABEL LENGTH
+         LA    R15,CBSDATA             Point to the label
+         EX    R14,LINKEX              SEE IF ITS THE SAME
+         LA    R3,7(R3,R14)            POINT TO NEXT ITEM
+         BNE   LINK3                   BR IF NOT A MATCH, IGNORE IT
+         LA    R1,INPLINE+2(R14)       POINT TO BYTE AT END OF COMMAND
+         CLI   0(R1),C' '              SEE IF FOLLOWED BY BLANK
+         BNE   LINK3                   BR IF NOT A MATCH, IGNORE IT
+         CLI   CBSTYPE+1,4             SEE IF NEXT ITEM IS HEX
+         BNE   LINK3                   IF NOT, ANALYZE IT FOR A LABEL
+*
+*        A match has been found. Fetch the address to link to
+*
+         SR    R1,R1                   CLEAR FOR IC
+         IC    R1,CBSLEN+1             LENGTH OF ITEM  MINUS 1
+         LA    R1,2(,R1)               TRUE LENGTH PLUS 1 FOR ROUNDING
+         SRL   R1,1                    GET NUMBER OF BYTES TO FETCH
+         LR    R0,R1                   COPY TO LENGTH REG
+         LA    R1,DUMPDATA             ADDR TO PLACE DATA IN
+         LH    R2,CURRENT              HIST TABLE POINTER
+         L     R2,HISTORY(R2)          CURRENT DISPLAY ADDRESS
+         AH    R2,CBSDATA              OFFSET OF ITEM TO FETCH
+         AH    R2,CBSFIRST-CBS(R4)     AND REMEMBER THE SEGMENT OFFSET
+         BAL   R14,GETSTOR             FETCH THE  ADDRESS
+         BAL   R15,FWDSUB              UPDATE HIST TABLE TO NEXT
+         SR    R15,R15                 CLEAR FOR IC
+         IC    R15,CBSLEN+1            GET LENGTH MINUS 1 AGAIN
+         LA    R15,1(,R15)             GET TRUE LENGTH
+         SLL   R15,2                   4 BITS PER NIBBLE
+         SR    R0,R0                   CLEAR RESULT REG
+         L     R1,DUMPDATA             LOAD ADDRESS THAT WAS FETCHED
+         TM    CBSLEN,1                SEE IF ODD DIGIT WANTED
+         BZ    LINKEVEN                BR IF NOT
+         SLL   R1,4                    ELSE SHIFT OUT UNWANTED BITS
+LINKEVEN SLDL  R0,0(R15)               ISOLATE DESIRED BITS
+         LH    R2,CURRENT              NEW HIST TABLE POINTER
+         ST    R0,HISTORY(R2)          SAVE IN HIST TAB
+         SR    R0,R0                   CLEAR CBSEGMENT INDICATOR
+         ST    R0,HISTORY+4(R2)        SAVE IN HIST TABLE
+         B     FORMAT                  GO FORMAT THE NEW CB
+         DROP  R3
+         USING CBS,R4
+LINKEND  L     R3,CBSNEXT              NEXT SEG ADDR
+         LR    R4,R3                   SAVE IT
+         CLM   R4,7,5(R5)              SEE IF SAME AS FIRST ONE
+         BE    LINKERR                 YES, LABEL NOT FOUND
+         B     LINK3                   ELSE SEARCH NEW SEG
+         DROP  R4
+LINKEX   CLC   0(0,R15),INPLINE+1      CHECK FOR LABEL MATCH
+*---------------------------------------------------------------------*
+*
+*  SET INDIRECT FLAG
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+INDIR    OI    FLAGS,INDFLAG           SET FLAG
+         LA    R3,1(R3)                Update scan pointer in INPLINE
+         CLI   INPLINE+1,C' '          Use current address?
+         BNE   NUMSCAN                 IF NO, GO SCAN INPUT ADDRESS
+         LH    R4,CURRENT              GET LAST ADDRESS DISPLAYED
+         L     R4,HISTORY(R4)          AND USE AS BASE FOR INDIRECT
+         B     ENDNUM
+         SPACE 2
+*---------------------------------------------------------------------*
+*
+*  Establish screen mode (TOP or CENTER = M0 or M1)
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+MODE     CLC   =C'1 ',INPLINE+1        Mode one?
+         BE    MODE1                   Yes: good
+         CLC   =C'0 ',INPLINE+1        Mode zero?
+         BNE   INVAL                   If neither, invalid MODE
+         NI    MODEFLAG,255-MIDDUMP    Mode 0 means: do not go back
+         B     FORMAT
+MODE1    OI    MODEFLAG,MIDDUMP        Mode 1 means: go back 7 lines
+         B     FORMAT
+INVAL    MVC   MSGLINE,MODEMSG         Invalid MODE (not 0 or 1)
+         B     FORMAT
+         SPACE 2
+*---------------------------------------------------------------------*
+*
+*  MANIPULATE HISTORY TABLE
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+FWD      BAL   R15,FWDSUB              FORWARD 1 IN HIST TABLE
+         B     FORMAT
+         SPACE
+FWDSUB   LH    R1,CURRENT              CURRENT ENTRY INDEX
+         LA    R1,8(,R1)               Increase by 1
+         CH    R1,=H'400'              SEE IF WRAP NEEDED
+         BL    FWDEND                  BR IF NOT
+         SR    R1,R1                   WRAP TO BEGINNING
+FWDEND   STH   R1,CURRENT              STORE NEW OFFSET
+         BR    R15                     RETURN TO CALLER
+BACK     LH    R1,CURRENT
+         SH    R1,=H'8'                BACK UP ONE ENTRY
+         BNM   BACKEND                 BR IF NO BACKWARD WRAP
+         LA    R1,8*49                 ELSE GO TO END OF TABLE
+BACKEND  STH   R1,CURRENT              SAVE RESULT
+         B     FORMAT
+         SPACE 2
+*---------------------------------------------------------------------*
+*
+*   ADD ENTRY TO SYMBOL TABLE
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+DEFINE   LA    R15,50                  Maximum number of table entries
+         LA    R2,NAMES                START OF TABLE
+DEFLOOP1 CLI   0(R2),X'0'              SEE IF UNUSED ENTRY
+         BE    NSPACE                  BR IF SPACE FOUND
+         LA    R2,12(,R2)              Next entry of 12 bytes
+         BCT   R15,DEFLOOP1            TRY ALL ENTRIES
+         MVC   MSGLINE,SYMFULL         TABLE IS FULL
+         B     FORMAT
+NSPACE   LA    R15,9                   MAX LENGTH +1
+         LA    R0,INPLINE+1            ADDR OF FIRST BYTE
+         LR    R1,R0                   COPY SYMBOL ADDR
+DEFLOOP2 CLI   0(R1),C' '              SEE IF END OF SYM
+         BE    DEFEND                  BR IF YES
+         LA    R1,1(,R1)               POINT TO NEXT BYTE
+         BCT   R15,DEFLOOP2            CONTINUE FOR 9 BYTES
+DEFBAD   MVC   MSGLINE,DEFMSG          SYMBOL TOO LONG OR TOO SHORT
+         B     FORMAT2                 DISPLAY WITH CURSOR AT ERROR
+DEFEND   SR    R1,R0                   SYMBOL LENGTH
+         BZ    DEFBAD                  NULL SYMBOL ILLEGAL
+         BCTR  R1,R0                   FOR EXECUTE
+         MVC   0(8,R2),=CL8' '         CLEAR TABLE ENTRY
+         EX    R1,DEFMOVE              MOVE SYMBOL
+         LH    R1,CURRENT              GET CURRENT ADDRESS
+         L     R1,HISTORY(R1)
+         ST    R1,8(R2)                STORE WITH SYMBOL
+         B     FORMAT
+DEFMOVE  MVC   0(0,R2),INPLINE+1       EXECUTED TO MOVE SYMBOL
+         SPACE 2
+*---------------------------------------------------------------------*
+*
+*        Scan the address expression.
+*        Register usage:
+*        R2 Last number scanned
+*        R3 Scan pointer
+*        R4 Current output value
+*        R5 Last operator scanned
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+NUMSCAN  LH    R4,CURRENT              HISTORY TABLE POINTER
+         L     R4,HISTORY(R4)          CURRENT ENTRY IS DEFAULT
+         LA    R5,0                    ASSUME DEFAULT TO BE TAKEN
+         CLI   0(R3),C'+'              SEE 2F PREFIX PLUS
+         BNE   NOTPLUS                 BR IF NOT
+         LA    R5,2                    INDICATE PLUS OPERATOR
+         B     NUMOP                   GO TO ADV POINTER
+NOTPLUS  CLI   0(R3),C'-'              IS IT PREFIX MINUS
+         BNE   NUMLOOP                 BR IF NOT, USE DEFAULT AS LOAD
+         LA    R5,4                    INDICATE MINUS OPERATOR
+NUMOP    LA    R3,1(,R3)               POINT TO NEXT INPUT BYTE
+NUMLOOP  CLI   0(R3),C','              SEE IF NAME INDICATED
+         BE    NAMESCAN                BR IF YES
+         TRT   0(9,R3),NUMTAB          SEARCH FOR DELIMITER
+         LR    R6,R3                   SAVE START OF NUMBER
+         BC    8,BADSTUFF              BR IF INPUT TOO LONG
+         LR    R3,R1                   UPDATE SCAN POINTER
+         SR    R1,R6                   GET LENGTH OF INPUT
+         BZ    BADSTUFF                BR IF ZERO INPUT
+         MVC   TEMP1(8),=CL8' '        CLEAR TEMP AREA
+         LA    R15,TEMP1+8             RIGHT JUSTIFY INPUT
+         SR    R15,R1                  POINT TO RIGHT SPOT IN TEMP AREA
+         BCTR  R1,0                    PREPARE FOR EX
+         EX    R1,HEXMOVE              MOVE INPUT RIGHT JUSTIFIED
+         TR    TEMP1(8),HEXTAB         TRANSLATE TO HEX
+         PACK  TEMP2(5),TEMP1(9)       CONVERT HEX TO BINARY
+         ICM   R2,15,TEMP2             NEW DISPLAY ADDRESS
+NUMDELIM EX    0,OPER(R5)              EXECUTE PREVIOUS OPERATOR
+         CLI   0(R3),C' '              IS DELIM A BLANK
+         BE    ENDNUM                  IF YES, END SCAN
+         LA    R5,2                    PLUS OPERATOR CODE
+         CLI   0(R3),C'+'              IS OPER L PLUS
+         BE    NUMOP                   BR IF YES TO CONTINUE SAAN
+         LA    R5,4                    MINUS CODE
+         CLI   0(R3),C'-'              IS OPER MINUS
+         BE    NUMOP                   BR IF YES
+         MVC   MSGLINE,INVALOP         ELSE BAD DELIMITER
+         B     FORMAT2                 DISPLAY WITH CURSOR AT ERROR
+ENDNUM   TM    FLAGS,INDFLAG           IS THIS AN INDIRECT REQ
+         BZ    NOTIND                  BR IF NOT
+         L     R4,0(,R4)               DO THE INDIRECT
+NOTIND   BAL   R15,FWDSUB              UPDATE HISTORY POINTR
+         LH    R15,CURRENT             NEW HIST TABLE OFFSET
+         ST    R4,HISTORY(R15)         SAVE VALUE IN HISTORY TABLE
+         SR    R0,R0                   INDICATE DISPLAY FORMAT IS DUMP
+         ST    R0,HISTORY+4(R15)       AND SAVE WITH HISTORY
+         B     FORMAT
+         SPACE 2
+* SCAN INPUT FOR A NAME IN THE SYMBOL TABOL
+NAMESCAN LA    R3,1(,R3)               SKIP OVER COMMA
+         LR    R1,R3                   COPY INPUT POINTER
+         LA    R15,9                   MAX LENGTH +1
+NAMELOOP CLI   0(R1),C'A'              SEE IF VALID CHAR
+         BL    NAMEEND                 BR IF NOT, DELIM FOUND
+         LA    R1,1(,R1)               POINT TO NEXT BYTE
+         BCT   R15,NAMELOOP            ALLOW EIGHT BYTES PLUS DELIM
+NAMEBAD  MVC   MSGLINE,NAMEMSG         NULL NAME OR NAME TOO LONG
+         B     FORMAT2                 DISPLAY WITH CURSOR AT ERROR
+NAMEEND  SR    R1,R3                   FIND LENGTH
+         BZ    BADSTUFF                BR IF TOO SHORT
+         MVC   TEMP1(8),BLANKS         Clear work area
+         BCTR  R1,0                    SET UP FOR EX
+         EX    R1,NAMEMOVE             MOVE TO WORK AREA, BLANK PAD
+         LA    R3,1(R3,R1)             UPDATE POINTER
+         LA    R15,50                  Maximum entries in SYMBOL table
+         LA    R1,NAMES                START OF SYM TABLE
+NAMELP2  CLC   TEMP1(8),0(R1)          SEE IF NAME IN TABLE
+         BE    NAMEFIND                BR IF YES
+         LA    R1,12(,R1)              POINT TO NEXT ENTRY
+         BCT   R15,NAMELP2             BR IF ANY ENTRIES LEFT
+         B     NAMEBAD                 BR IF NONE LEFT, UNDEFUNED SYM
+NAMEFIND L     R2,8(,R1)               Get symbol value
+         B     NUMDELIM                USE IN EXPRESSION
+*  THESE INSTRUCTIONS ARE THE OBJECT OF AN EXECUTE
+OPER     LR    R4,R2                   USE HIST TABLE AS DEFAULT INPUT
+         AR    R4,R2                   PLUS OPERATOR
+         SR    R4,R2                   MINUS OPERATOR
+HEXMOVE  MVC   0(0,R15),0(R6)          RIGHT JUSTIFY INPUT DATA
+NAMEMOVE MVC   TEMP1(1),0(R3)          PAD NAME WITH BLANKS BY MOVING
+         SPACE
+BADSTUFF MVC   MSGLINE,ERRMSG          NOTE BAD INPUT
+         B     FORMAT2                 DISPLAY WITH CURSOR AT ERROR
+*----------------------------------------------------------------------
+*
+*        ERASE: clear the screen buffer
+*
+*----------------------------------------------------------------------
+         SPACE 2
+ERASE    SAVE  (2,5)                   Need some work registers
+         LA    R2,OUT1                 START OF AREA TO CLEAR
+         LA    R3,80*16                LENGTH TO CLEAR
+         LA    R5,C' '                 FILL CHAR
+         SLL   R5,24                   MAKE PAD BYTE AND CLEAR SOURCE
+         MVCL  R2,R4                   PROPAGATE BLANKS
+         RETURN (2,5)                  RESTORE REGS AND RETURN
+         EJECT
+* EXECUTED INSTRUCTIONS AND CONSTANTS
+CLEARMVC MVC   0(0,R6),BLANKS          CLEAR SOME SPACE
+MOVEMVC  MVC   0(0,R15),1(R15)         Move data backwards
+*
+*        Obtain 256 bytes of the requested storage pointed to by
+*        register 2. Fetch protected storage will be obtained if
+*        LOOKMVS runs authorized.
+*
+GETSTOR  DS    0H
+         ST    R14,R14GET              Save register 14
+         MVI   DUMPDATA,X'40'          Blank output
+         MVC   DUMPDATA+1(255),DUMPDATA
+         MVC   DUMPDATA(26),=CL26'Storage could not be read'
+         TM    FLAGS,$APF              APF authorized?
+         BNO   NOAPF1                  No: bypass MODESET
+         MODESET KEY=ZERO,MODE=SUP     For fetch protected storage
+NOAPF1   DS    0H                      Save for ESTAE
+         STM   R2,R6,ESTAERGS          Save register 2,3,4,5 and 6
+         ST    R8,ESTAERGS+20          Register 8
+         STM   R11,R13,ESTAERGS+24     Register 11 - 13
+         LA    R14,ABEND               Recovery point
+         ST    R14,ESTAERGS+36         Save in ESTAE register block
+         LA    R7,ESTAERGS
+         XC    ESTAEL(L#ESTAEL),ESTAEL
+         ESTAE RECOVER,PARAM=(7),MF=(E,ESTAEL) Establish ESTAE
+         MVC   DUMPDATA(256),0(R2)
+ABEND    DS    0H
+         ESTAE 0                       Kill ESTAE
+         TM    FLAGS,$APF              APF authorized?
+         BNO   NOAPF2                  No: bypass MODESET
+         MODESET KEY=NZERO,MODE=PROB
+NOAPF2   L     R14,R14GET
+         BR    R14
+         SPACE 2
+*---------------------------------------------------------------------*
+*
+*        ESTAE exit, try to recover from abends.
+*
+*---------------------------------------------------------------------*
+         SPACE 2
+RECOVER  DS    0H
+         DROP  ,
+         USING *,R15                   Get temporary addressability
+         USING SDWA,R1                 Get addressability over sdwa
+         CH    R0,=H'12'               Is there an SDWA
+         BE    SETRP00                 No: continue with abend
+         XR    R7,R7                   Clear register 2
+         ICM   R7,7,SDWACMPC           Insert completion code
+         SRL   R7,12                   Shift out user completion codep1
+         B     SETRP04                 Retry
+SETRP00  DS    0H
+         XR    R15,R15                 Else continue with abend
+         BR    R14                     Branch to RTM (percolate)
+SETRP04  DS    0H
+         L     R3,SDWAPARM             PARM with registers 8-13
+         MVC   SDWASR02(20),0(R3)      Restore registers 2,3,4,5,6
+         MVC   SDWASR08(4),20(R3)      Register 8
+         MVC   SDWASR11(12),24(R3)     Registers 11, 12 and 13
+         MVC   SDWASR14(4),36(R3)      Register 14
+         ST    R7,SDWASR07             Save register 7 for retry rout
+         SETRP RC=4,RETADDR=RET,RETREGS=YES,FRESDWA=YES,               X
+               DUMP=NO
+         DROP  R1,R15                  SDWA and RECOVER
+         BR    R14                     Branch to rtm
+RET      DS    0H
+         DROP  ,
+         USING LOOKMVS,R12,R11         Make module addressable again
+         USING WORKAREA,R13            Our working storage
+         USING SCR1,R8                 Screen I/O area
+         STCM  R7,3,DBW+6              Completion code
+         UNPK  DBW(5),DBW+6(3)         Expand each byte of ABEND code
+         NC    DBW(4),=X'0F0F0F0F0F0F' Clear hi order nibbles
+         TR    DBW(4),=C'0123456789ABCDEF'
+         MVC   MSGLINE,PCMSG           Message on screen
+         MVC   MSGLINE+7(3),DBW+1      Move abend code into message
+         BR    R14                     Retry successful
+         SPACE 2
+*
+LOGOOD   DC    F'0'
+HIGOOD   DC    XL4'00FFF123'
+* ERROR MESSAGE FOR BAD INPUT
+MODEMSG  DC    CL45'Invalid mode'
+INVALOP  DC    CL45'Invalid operator'
+SYMFULL  DC    CL45'Symbol table is full'
+NAMEMSG  DC    CL45'Undefined symbol'
+DEFMSG   DC    CL45'Null symbol ot symbol too long'
+PCMSG    DC    CL45'Abend Sxxx detected'
+LINKMSG  DC    CL45'Link failed'
+ERRMSG   DC    CL45'Invalid address -- try again'
+HELPMSG1 DC    CL80'LOOKMVS is a real time core display and formatting *
+               program.'
+HELPMSG2 DC    CL80'Valid commands are:'
+HELPMSG3 DC    CL40'hhhh  24 bit direct'
+         DC    CL40'× +/-hhhh Add/subtract hh of current adr'
+HELPMSG4 DC    CL40'>     Forward'
+         DC    CL40'× <     Backward'
+HELPMSG5 DC    CL40'=sym  Define current address as "sym"'
+         DC    CL40'× ,sym  Redisplay core at "sym"'
+HELPMSG6 DC    CL40'M0/M1 Flip between top and centered'
+         DC    CL40'× Lname Indirect thru control block fld'
+HELPMSG7 DC    CL40'Ocb   Format as "cb" control block'
+         DC    CL40'×'
+HELPMSG8 DC    CL40'      "cb" may be NULL to show as hex'
+         DC    CL40'×'
+HELPMSG9 DC    CL40' "hhhh" is 1 to 8 HEX characters'
+         DC    CL40' '
+BLANKS   DC    CL79' '
+ENTER    EQU   X'7D'                   ENTER KEY
+PA1      EQU   X'6C'                   ATTENTION
+BLUE     EQU   X'2842F1'
+RED      EQU   X'2842F2'
+PINK     EQU   X'2842F3'
+GREEN    EQU   X'2842F4'
+TURQ     EQU   X'2842F5'
+YELLOW   EQU   X'2842F6'
+WHITE    EQU   X'2842F7'
+HDEFAULT EQU   X'284100'
+REVERSE  EQU   X'2841F2'
+USCORE   EQU   X'2841F4'
+         EJECT
+HEXTAB   DC    256C' '                 GENERAL HEX CONVERSION TABLE
+         ORG   HEXTAB+C'A'             INPUT CONVERSION
+         DC    X'0A0B0C0D0E0F'
+         ORG   HEXTAB+C'0'             OUTPUT CONVERSION
+         DC    C'0123456789ABCDEF'
+         ORG
+* HEX INPUT TRT TABLE
+NUMTAB   DC    256X'1'
+         ORG   NUMTAB+C'A'
+         DC    6X'0'
+         ORG   NUMTAB+C'0'
+         DC    10X'0'
+         ORG
+VALCHAR  DC    256C'.'                 TRANSLATE TO VALID CHARS
+         ORG   VALCHAR+C' '
+         DC    C' '
+         ORG   VALCHAR+C'Ö'
+         DC    C'Ö.<(+×&&'
+         ORG   VALCHAR+C'!'
+         DC    C'!$*);^-/'
+         ORG   VALCHAR+C','
+         DC    C',%_.?'
+         ORG   VALCHAR+C':'
+         DC    C':#@''="'
+         ORG   VALCHAR+C'a'
+         DC    C'abcdefghi'
+         ORG   VALCHAR+C'j'
+         DC    C'jklmnopqr'
+         ORG   VALCHAR+C's'
+         DC    C'stuvwxyz'
+         ORG   VALCHAR+C'A'
+         DC    C'ABCDEFGHI'
+         ORG   VALCHAR+C'J'
+         DC    C'JKLMNOPQR'
+         ORG   VALCHAR+C'S'
+         DC    C'STUVWXYZ'
+         ORG   VALCHAR+C'0'
+         DC    C'0123456789'
+         ORG
+CLEAR    DC    X'277EC21140401D4013'
+*  SCREEN FORMAT
+         LTORG
+         SPACE 2
+SCR1     CSECT
+         DC    X'27F5C2114040'         CONTROL, CMD, WCC, SBA
+         DC    AL3(WHITE)              Color
+TITLE    DC    CL80'LOOK command - display virtual memory in MVS'
+         DC    X'11C260'               R3,C1
+         DC    AL3(TURQ)               Color
+OUT1     DS    CL80
+OUT2     DS    CL80
+OUT3     DS    CL80
+OUT4     DS    CL80
+OUT5     DS    CL80
+OUT6     DS    CL80
+OUT7     DS    CL80
+OUT8     DS    CL80
+OUT9     DS    CL80
+OUT10    DS    CL80
+OUT11    DS    CL80
+OUT12    DS    CL80
+OUT13    DS    CL80
+OUT14    DS    CL80
+OUT15    DS    CL80
+OUT16    DS    CL80
+         DC    AL3(RED)
+         DC    CL10'Command =>'
+         DC    AL3(GREEN)
+         DC    X'1D4013'               ATTRIBUTE AND IC
+INPLINE  DC    CL68' '
+         DC    X'1DF0'
+         DC    AL3(WHITE)              Color white
+         DC    CL10'Prev.cmd: '
+         DC    AL3(YELLOW)             COLOR YELLOW
+INPSAVE  DS    CL68
+         DC    X'11D940'               R21,C1
+         DC    AL3(RED)
+MSGLINE  DC    CL45' ',CL35' '
+         DC    X'115B60'               R23,C1
+         DC    AL3(BLUE)
+         DC    C'PFK1 =',AL3(WHITE),C'Help     ',AL3(BLUE)
+         DC    C' 2=',AL3(WHITE),C'         ',AL3(BLUE)
+         DC    C' 3=',AL3(WHITE),C'End      ',AL3(BLUE)
+         DC    C' 4=',AL3(WHITE),C'         ',AL3(BLUE)
+         DC    C' 5=',AL3(WHITE),C'Repeat   ',AL3(BLUE)
+         DC    C' 6=',AL3(WHITE),C'         ',AL3(BLUE)
+         DC    X'115CF0'               R24,C1
+         DC    AL3(BLUE)
+         DC    C'PFK7 =',AL3(WHITE),C'Up       ',AL3(BLUE)
+         DC    C' 8=',AL3(WHITE),C'Down     ',AL3(BLUE)
+         DC    C' 9=',AL3(WHITE),C'         ',AL3(BLUE)
+         DC    C'10=',AL3(WHITE),C'Hist bwd ',AL3(BLUE)
+         DC    C'11=',AL3(WHITE),C'Hist fwd ',AL3(BLUE)
+         DC    C'12=',AL3(WHITE),C'         ',AL3(BLUE)
+SCR1LEN  EQU   *-SCR1
+*
+WORKAREA DSECT
+SAVE     DS    18F                     Our save area, should be 1st.
+HISTORY  DS    100F                    History table 50 entries
+NAMES    DS    150F                    SYMBOL TABLE
+DBW      DS    D                       Field to receive complete code
+ESTAEL   ESTAE MF=L
+L#ESTAEL EQU   *-ESTAEL
+ESTAERGS DS    10F                   Save reg. 2,3,4,5,6,8,11,12,13,14
+R14GET   DS    F                       Save register 14 GETSTOR
+DUMPDATA DS    XL256                   Data returned by GETSTOR
+BUFFER   DS    0CL74                   Buffer from TGET
+AID      DS    X                       AID byte after TGET ASIS
+BUFCSR   DS    XL2                     Cursor address after TGET ASIS
+BUFSBA   DS    XL3
+BUFCMD   DS    CL68                    Issued command
+CURRENT  DS    H                       Offset in History table
+IOAREA   DS    CL(SCR1LEN)             Output screen area
+TEMP1    DS    CL9                     CONVERSION WORK AREA
+TEMP2    DS    CL9                     CONVERSION WORK AREA
+FLAGS    DS    X                       ASSORTED FLAGS
+INDFLAG  EQU   X'80'                   INDIRECT IN PROGRESS
+$APF     EQU   X'40'                   If on: APF authorizzed
+MODEFLAG DS    X                       USER OPTION FLAGS
+MIDDUMP  EQU   X'80'                   ON TO FORCE DISPLAY BACK 8 LINES
+ALIGN    EQU   X'40'                   ON TO ALIGN DUMP ON QUADWORD
+WORKLEN  EQU   *-WORKAREA
+         SPACE 5
+*----------------------------------------------------------------------
+*
+* CBS  -- CONTROL BLOCK SEGMENT
+*
+*----------------------------------------------------------------------
+         SPACE 2
+CBS      DSECT
+CBSPREV  DS    A                       ADDR OF PREVIOUS SEGMENT
+CBSNEXT  DS    A                       ADDR OF NEXT SEGMENT
+CBSFIRST DS    H                       OFFSET OF FIRST DATA TO FETCH
+CBSSIZE  DS    H                       LENGTH OF DATA TO FETCH
+CBSNAME  DS    CL8                     SEGMENT IDENTIFIER
+* THE FOLOWING FIELDS DESCRIBE A FORMAT ITEM
+CBSTYPE  DS    H                       FORMAT TYPE
+CBSLEN   DS    H                       SCREEN LENGTH OF ITEM AS REQ
+*                                      BY FORMAT ROUTINE
+CBSOFF   DS    H                       SCREEN OFFSET OF ITEM
+CBSDATA  DS    H                       DATA OFFSET FROM START OF THIS
+*                                      SEGMENTS DATA AREA OR A VARIABLE
+*                                      LENGTH CONSTANT
+         PRINT NOGEN
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6                       Address of control block segment
+R7       EQU   7                       Used in ESTAE.
+R8       EQU   8                       Address of I/O area
+R9       EQU   9                       Not used
+R10      EQU   10                      Not used
+R11      EQU   11                      2nd base register
+R12      EQU   12                      1st base register
+R13      EQU   13                      Save area + working storage
+R14      EQU   14
+R15      EQU   15
+         PRINT NOGEN
+         IHAPSA DSECT=YES
+         IKJTCB DSECT=YES,LIST=NO
+         IEZJSCB
+         IHASDWA
+         END

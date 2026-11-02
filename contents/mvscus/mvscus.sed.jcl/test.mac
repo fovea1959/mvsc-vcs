@@ -1,18 +1,8 @@
 //SEDTEST  JOB 01,'TEST SED',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
 //             NOTIFY=&SYSUID,REGION=2048K
 //*------------------------------------------------------------------*
-//        EXEC PGM=SED,REGION=6144K,PARM='l'
-//STEPLIB   DD DISP=SHR,DSN=MVSCUS.SED.LINKLIB
-//SYSIN     DD *
-new is good
-new is bad
-new is awful
-/*
-//SYSPRINT  DD SYSOUT=*
-//SYSTERM   DD SYSOUT=*
-//*------------------------------------------------------------------*
-//        EXEC PGM=SEDGOOD,REGION=6144K,PARM='s/good/bad/g'
-//STEPLIB   DD DISP=SHR,DSN=MVSCUS.SED.LINKLIB
+//        EXEC PGM=SED,REGION=6144K,PARM='s/good/excellent/g'
+//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
 //SYSIN     DD *
 old is good
 old is bad
@@ -21,8 +11,12 @@ old is awful
 //SYSPRINT  DD SYSOUT=*
 //SYSTERM   DD SYSOUT=*
 //*------------------------------------------------------------------*
-//        EXEC PGM=HELLO,REGION=6144K,PARM='s/good/bad/g'
-//STEPLIB   DD DISP=SHR,DSN=MVSCUS.SED.LINKLIB
-//SYSIN     DD DUMMY
+//        EXEC PGM=SED,REGION=6144K,PARM='-V'
+//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
+//SYSIN     DD *
+old is good
+old is bad
+old is awful
+/*
 //SYSPRINT  DD SYSOUT=*
 //SYSTERM   DD SYSOUT=*

@@ -1,0 +1,12 @@
+//SEDTEST  JOB 01,'TEST SED',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//        EXEC PGM=CC370,REGION=6144K,PARM='l'
+//STEPLIB   DD DISP=SHR,DSN=WEGSCD.SED.LOADLIB
+//SYSIN     DD *
+old is good
+old is bad
+old is awful
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*

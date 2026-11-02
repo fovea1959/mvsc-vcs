@@ -1,0 +1,34 @@
+//DI$KMAPA JOB 01,'Build DISKMAPA',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//ASM1    EXEC ASMFC,PARM='OBJ'
+//ASM.SYSLIB DD
+//          DD DSN=CBT249.FILE017.PDS,DISP=SHR,
+//             UNIT=SYSDA,VOL=SER=CBT249
+//ASM.SYSIN DD DSN=CBT249.FILE017.PDS(DISKMAPA),DISP=SHR,
+//             UNIT=SYSDA,VOL=SER=CBT249
+//ASM.SYSGO DD DSN=&&OBJSET,UNIT=SYSSQ,SPACE=(80,(200,50)),
+//             DISP=(MOD,PASS)
+//*------------------------------------------------------------------*
+//ASM2    EXEC ASMFC,PARM='OBJ'
+//ASM.SYSLIB DD
+//          DD DSN=CBT249.FILE017.PDS,DISP=SHR,
+//             UNIT=SYSDA,VOL=SER=CBT249
+//ASM.SYSIN DD DSN=CBT249.FILE017.PDS(DYNAM),DISP=SHR,
+//             UNIT=SYSDA,VOL=SER=CBT249
+//ASM.SYSGO DD DSN=&&OBJSET,UNIT=SYSSQ,SPACE=(80,(200,50)),
+//             DISP=(MOD,PASS)
+//*------------------------------------------------------------------*
+//LKED   EXEC  PGM=IEWL,REGION=1024K,
+//             COND=((4,LT,ASM1.ASM),(4,LT,ASM2.ASM)),
+//             PARM='LIST,XREF,LET,AC=1'
+//SYSLIB    DD DSN=SYS2.LINKLIB,DISP=SHR
+//SYSUT1    DD UNIT=SYSDA,SPACE=(CYL,(2,1))
+//SYSPRINT  DD SYSOUT=*
+//SYSLMOD   DD DSN=SYS2.LINKLIB(DISKMAPA),DISP=SHR
+//SYSLIN    DD DSN=&&OBJSET,DISP=(OLD,DELETE)
+//          DD *
+ ENTRY DISKMAPA
+ NAME DISKMAPA(R)
+/*
+//*

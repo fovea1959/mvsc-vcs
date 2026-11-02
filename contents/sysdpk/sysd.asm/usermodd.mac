@@ -1,0 +1,1364 @@
+UMD TITLE 'GENERATE TK5 USERMOD DIRECTORY FROM USERMOD DATA SETS'
+*
+*        FUNCTION -
+*        ISSUE A VSAM GENERIC LOCATE FOR ALL DATA SET NAMES
+*        WITH THE HLQ OF 'USERMOD'
+*        IF A SYSIN DD STMT IS PRESENT THEN THE SYSIN RECORDS
+*        ARE CONVERTED TO RTF TEXT
+*        A '\' IN THE FIRST COLUMN GENERATES A TOC ENTRY FOR
+*        THE TEXT THAT FOLLOWS
+*        THERE IS NO LIMIT ON THE NUMBER OF TOC RECORDS AND TEXT
+*        RECORDS THAT CAN BE PROVIDED
+*        FOR EACH DATA SET NAME RETURNED BY THE LOCATE REQUEST:-
+*        1.  DYNAMICALLY ALLOCATE THE DATA SET
+*        2.  OPEN THE DATA SET
+*        3.  ISSUE A FIND FOR MEMBER @CVRLET IF NOT FOUND THEN
+*            TRY FOR $INSTALL
+*        4.  IF NEITHER FOUND THEN DISCARD THIS USERMOD DATA SET
+*        5.  CONVERT THE TEXT FOUND IN EITHER @CVRLET OR
+*            $INSTALL INTO RTF FORMAT FOR GENERATION OF THE
+*            USERMOD DIRECTORY DOCUMENT
+*
+USERMODD CSECT
+*
+         USING *,R11,R12
+*
+         SAVE  (14,12),,'GEN TK5 USERMOD DIRECTORY &SYSDATE &SYSTIME'
+*
+         LR    R11,R15                 LOAD FIRST BASE REGISTER
+         LA    R12,2048(,R11)
+         LA    R12,2048(,R12)          LOAD SECOND BASE REGISTER
+         LR    R2,R13
+         LA    R13,SAVEA1
+         ST    R2,4(,R13)              CHAIN SAVE AREAS
+         ST    R13,8(,R2)
+*
+*---------------------------------------------------------------------
+*
+*        ISSUE A GENERIC CATALOG LOCATE FOR ALL
+*        DATA SETS WITH A HLQ OF 'USERMOD.'
+*
+*---------------------------------------------------------------------
+*
+*        GETMAIN AND ZERO RESULT WORK AREA
+*
+         L     R0,LOCWAL               L'AREA FOR LOCATE RESULT AREA
+         LR    R3,R0                   SAVE VALUE
+         LR    R5,R0                   SAVE VALUE
+*
+         GETMAIN R,LV=(0)              REQUEST THE RESULT AREA
+*
+         ST    R1,LOCWAA               STORE ADDR OF AREA
+         LR    R2,R1                   R2 -> WORK AREA
+         SR    R15,R15                 ZERO L'SOURCE
+         MVCL  R2,R14                  ENSURE WORK AREA IS ZERO
+         STH   R5,0(,R1)               SET L'WORKAREA AS HALFWORD
+*                                      AT START OF WORK AREA
+         LA    R1,GENLOC               R1 -> CATALOG LOCATE PARAMETER
+*                                      LIST
+         USING CTGPL,R1                ADDRESSABILITY
+*
+*        SET UP CATALOG REQUEST AREA
+*
+         MVI   CTGOPTN3,X'00'          ENSURE HI-ORDER 3 BITS ARE ZERO
+         OI    CTGOPTN3,CTGSUPLT+CTGAM0
+         OI    CTGOPTN1,CTGNAME+CTGGENLD
+         LA    R15,HLQL                R15 -> HLQ
+         ST    R15,CTGENT
+         MVC   CTGWKA,LOCWAA           WORK AREA - RESULT AREA
+*
+         CATALOG (1)                   ISSUE GENERIC SUPER LOCATE
+*
+         LTR   R15,R15                 GOOD RETURN CODE?
+         BNZ   UMDERR7                 NO, BRANCH
+*
+*        DETERMINE THE SIZE OF THE WORKAREA RETURNED
+*
+         L     R1,LOCWAA
+         LA    R2,4(,R1)               R2 -> FIRST DATA SET ENTRY
+         ST    R2,LOCWAP
+         AH    R1,2(,R1)               R2 = L'WORKAEA
+         ST    R1,LOCWAAE              R1 -> END OF WORKAREA
+*
+*        OPEN RTFOUT
+*
+         OPEN  (RTFOUT,(OUTPUT))
+*
+         LTR   R15,R15                 OPEN SUCCESSFUL ?
+         BZ    UMDIRA                  YES, BRANCH
+*
+*        RTFOUT FAILED TO OPEN
+*
+         LA    R2,EMSG4
+         B     UMDWTO
+*
+*        EXTRACT JOBNAME AND OPEN SYSIN (IF PROVIDED)
+*
+UMDIRA   EXTRACT ATIOT,'S',FIELDS=(TIOT)  GET ADDR OF TIOT
+
+         L     R1,ATIOT
+         USING TIOT1,R1
+         MVC   #11JOBN,TIOCNJOB        STORE JOBNAME
+         SR    R15,R15
+UMDIRB   CLC   TIOEDDNM,=CL8'SYSIN'    SYSIN DDNAME FOUND ?
+         BE    UMDIRC                  YES, BRANCH
+         IC    R15,TIOELNGH            L'CURRENT TIOT ENTRY
+         AR    R1,R15                  INCR TO NEXT TIOT ENTRY
+         CLI   TIOELNGH,0              L'NEXT TIOT ENTRY = 0 ?
+         BNE   UMDIRB                  NO, PROCESS NEXT TIOT ENTRY
+         B     UMDIRD                  NO SYSIN DDNAME FOUND
+*
+UMDIRC   OPEN  (SYSIN)                 OPEN SYSIN
+*
+         LTR   R15,R15                 OPEN SUCCESSFUL ?
+         BZ    UMDIRCA                 YES, BRANCH
+         LA    R2,EMSG5                NO, GENERATE ERROR MSG
+         B     UMDWTO
+*
+UMDIRCA  OI    FLAGS,COPYT             SET ON COPY INPUT TEXT TO RTF
+*
+*        GENERATE RTF PREAMBLE TEXT
+*
+UMDIRD   LA    R6,PRETEXT              R6 -> PREAMBLE TEXT
+         BAS   R14,GENRECS
+*
+*        PROCESS SYSIN INPUT
+*
+         TM    FLAGS,COPYT             SYSIN INPUT PROVIDED ?
+         BZ    UMDIRBG                 NO, BYPASS SYSIN PROCESSING
+*
+         GET   SYSIN,SYSINREC          READ FIRST RECORD
+*
+         CLI   SYSINREC,C'\'           INDEX RECORD ?
+         BNE   UMDIRSX                 NO, FINISH SYSIN PROCESSING
+         B     UMDIRSA
+*
+UMDIRSB  GET   SYSIN,SYSINREC
+         CLI   SYSINREC,C'\'           INDEX RECORD ?
+         BNE   UMDIRSC                 NO, NORMAL RECORD
+*
+*        PROCESS INDEX ENTRY
+*
+UMDIRSA  BAL   R14,GENINDX             GENERATE INDEX ENTRY
+         B     UMDIRSB
+*
+*        PROCESS STANDARD RECORD
+*
+UMDIRSC  LA    R8,SYSINREC
+         BAL   R14,GENREC              WRITE RECORD
+         B     UMDIRSB
+*
+*        SYSIN - END OF FILE
+*
+UMDIRSX  CLOSE (SYSIN)
+*
+         FREEPOOL SYSIN
+*
+**********************************************************************
+**********************************************************************
+*
+*        BEGIN LOOP THROUGH THE LIST OF DATA SET NAMES
+*        TO EXTRACT COVER LETTERS
+*
+**********************************************************************
+**********************************************************************
+*
+*        EXTRACT USERMOD NAME TO USE AS DDNAME FOR DYNALLOC
+*        DETERMINE L'DSNAME
+*
+UMDIRBG  L     R15,LOCWAP          R15 -> NEXT DATA SET TO PROCESS
+         CLI   0(R15),C'A'         NON VSAM ENTITY ?
+         BE    UMDIRBGA            YES, BRANCH
+         BAS   R14,INTERR          NO, INTERNAL ERROR
+UMDIRBGA LA    R15,1(,R15)         R15 -> FIRST CHAR OF DSNAME
+         CLC   HLQ,0(R15)          USERMOD. ?
+         BE    UMDIRBGB            YES, BRANCH
+         BAS   R14,INTERR          NO, INTERNAL ERROR
+UMDIRBGB TRT   0(44,R15),BLANKTB   SCAN FOR FIRST BLANK
+         BNZ   UMDIRBGC            FOUND A BLANK
+         BAS   R14,INTERR          INTERNAL ERROR
+UMDIRBGC SR    R1,R15              R1 = L'USERMOD DSNAME-1
+         LA    R1,1(,R1)
+         ST    R1,UMODDSNL         SAVE L'USERMOD DSNAME
+         LA    R0,L'HLQ
+         SR    R1,R0               CALC L'UMODDDN
+         C     R1,=F'8'            > 8 CHARS?
+         BH    UMDIRBY             YES, NOT A USERMOD DATA SET
+*                                  DISCARD
+         ST    R1,UMODDDNL
+         MVI   UMODDDN,C' '        BLANK USERMOD NAME
+         MVC   UMODDDN+1(L'UMODDDN-1),UMODDDN
+         BCTR  R1,0
+UMDIRBGE MVC   UMODDDN(0),L'HLQ(R15)    EXTRACT USERMOD NAME
+         EX    R1,UMDIRBGE
+*
+*        CONSTRUCT DYNALLOC PARAMTER LIST
+*
+         LA    R6,DYNAREA+4        R6 -> S99RB
+         USING S99RB,R6
+         XC    S99RB(S99RBEND-S99RB),S99RB  ZERO ALL OF RB
+         MVI   S99RBLN,S99RBEND-S99RB  SET LENGTH OF RB
+         MVI   S99VERB,S99VRBAL    REQUEST ALLOCATION VERB
+         OI    S99FLAG1,S99NOMNT   DO NOT MOUNT OR USE OFFLINE DEVICE
+         LA    R7,S99RB+(S99RBEND-S99RB) R7 -> TEXT UNIT PTRS
+         USING S99TUPL,R7
+         ST    R7,S99TXTPP         S99TXTPP - > FIRST TEXT UNIT PTR
+*
+*        ALLOW FOR A MAX OF 12 TEXT UNIT PTRS AND THEN STORE THE
+*        ACTUAL TEXT UNITS AFTER THE TU PTRS IN DYNAREA
+*
+         LA    R8,12*4(,R7)        R8 -> TEXT UNIT AREA
+         USING S99TUNIT,R8
+*
+*        R7 -> S99TUPL             LIST OF PTRS TO TEXT UNITS
+*        R8 -> S99TUNIT            TEXT UNITS AND THE ASSOCIATED DATA
+*
+*        DDNAME SPECIFICATION KEY AND DDNAME PARM
+*
+         ST    R8,S99TUPTR         STORE ADDR OF TEXT UNIT IN PTR LIST
+         LA    R7,4(,R7)           INCREMENT S99TUPL TO NEXT ENTRY
+         MVC   S99TUKEY(#DDNAMAL),#DDNAMA  MOVE DDNAME KEY SPEC
+         MVC   S99TUPAR(L'UMODDDN),UMODDDN   MOVE IN DD NAME
+         LA    R8,L'UMODDDN+6(R8)          INCR PTR
+*
+*        DSNAME SPECIFICATION KEY AND DSNAME PARM
+*
+         ST    R8,S99TUPTR         STORE ADDR OF TEXT UNIT IN PTR LIST
+         LA    R7,4(,R7)           INCREMENT S99TUPL TO NEXT ENTRY
+         MVC   S99TUKEY(#DSNAMAL),#DSNAMA  MOVE IN DSNAME KEY SPEC
+         L     R1,UMODDSNL
+         STCM  R1,B'0011',S99TULNG  SET L'DSNAME IN SPEC
+         BCTR  R1,0
+UMDIRBGG MVC   S99TUPAR(0),0(R15)   MOVE IN USER MOD DATA SET NAME
+*                                   FROM LOCATE RESULT AREA
+         EX    R1,UMDIRBGG
+         LA    R8,7(R1,R8)          INCR PTR
+*
+*        DATA SET STATUS SPECIFICATION KEY
+*
+         ST    R8,S99TUPTR         STORE ADDR OF TEXT UNIT IN PTR LIST
+         LA    R7,4(,R7)           INCREMENT S99TUPL TO NEXT ENTRY
+         MVC   S99TUKEY(#STATUSL),#STATUS  MOVE STATUS KEY SPEC
+         MVI   S99TUPAR,X'08'      SET STATUS TO SHR
+         LA    R8,#STATUSL+1(,R8)  INCR PTR
+*
+         OI    S99TUPTR,S99TUPLN   LAST ENTRY, TERMINATE LIST
+         LA    R1,DYNAREA          R1 -> S99RBPTR
+*
+         DYNALLOC
+*
+         LTR   R15,R15             SUCCESSFUL ALLOCATION ?
+         BNZ   UMDERR8A            NO, BRANCH TO ERROR PROCESSING
+*
+         DROP  R6,R7,R8
+*
+*---------------------------------------------------------------------
+*
+*        PROCESS DYNAMICALLY ALLOCATED USERMOD DATASET
+*
+*---------------------------------------------------------------------
+*
+*        SET DCB DDNAME IN SYSLIB DCB TO USERMOD DDNAME
+*
+         LA    R10,SYSLIB
+         USING IHADCB,R10
+         MVC   DCBDDNAM,UMODDDN
+*
+*        OPEN SYSLIB
+*
+         OPEN  (SYSLIB,(INPUT))
+*
+         LTR   R15,R15                 OPEN SUCCESSFUL ?
+         BNZ   UMDERR1                 NO, BRANCH
+         LH    R0,DCBBLKSI             BLKSIZE FOR GETMAIN FOR I/O
+*
+         GETMAIN R,LV=(0)              REQUEST I/O AREA
+*
+         ST    R1,BLKADDR              SAVE ADDR OF I/O AREA
+*
+*        ISSUE A FIND FOR THE MEMBER TO POSITION FOR SUBSEQUENT READS
+*
+         FIND  SYSLIB,@CVRLET,D
+*
+*        TEST RETURN CODE
+*
+         LTR   R15,R15                 GOOD RETURN ?
+         BZ    UMDIRG                  YES, BRANCH
+         C     R15,=F'4'               NO, @CVRLET NOT FOUND
+         BNE   UMDERR3                 NOT RC=4, ERROR
+*
+*        DIDNT FIND A COVER LETTER, TRY FOR AN INSTALL JOBSTREAM
+*
+         FIND  SYSLIB,$INSTALL,D
+*
+         LTR   R15,R15
+         BNZ   UMDIRMX                 GIVE UP AND BYPASS THIS
+*                                      USERMOD DATA SET ENTIRELY
+*        GENERATE THE RTF HEADING
+*
+*        USE UMODDDN AS NAME
+*
+UMDIRG   BAS   R14,GENHEAD
+         NI    FLAGS,255-CFOUND-SCOMM-MACSUP  ZERO FLAGS
+*
+*        READ A BLOCK
+*
+UMDIRN   L     R8,BLKADDR              R8 -> I/O AREA
+*
+         READ  SYSDECB,SF,SYSLIB,(8),'S',MF=E
+*
+         CHECK SYSDECB
+*
+         LA    R15,SYSDECB
+         USING DECB,R15
+         LH    R7,DCBBLKSI             GET LENGTH OF READ REQUEST
+         L     R14,DECIOBPT            R14 -> IOB
+         SH    R7,14(,R14)             SUB RESIDUAL CSW LENGTH IN IOB
+         DROP  R15
+         AR    R7,R8                   R7 -> LAST BYTE + 1
+*
+*        PROCESS BLOCK
+*
+UMDIRQ   CLC   0(2,R8),=C'++'          UMD CONTROL STATMENT ?
+         BNE   UMDIRP                  NO, BRANCH
+*        PROCESSING A CNTL STMT
+         OI    FLAGS,CFOUND            FOUND CNTL STMT
+         NI    FLAGS,255-MACSUP-SCOMM
+         BAS   R14,GENREC              GENERATE RTF RECORD
+*        COMMENT TEXT COMMENCED ON CONTROL STMT ?
+         TRT   0(72,R8),TRANSTAB       SCAN FOR '/' AND '.'
+         BZ    UMDIRQB                 NO '/' OR '.' TERMINATION
+*                                      FOUND ON CNTL STMT
+*                                      FORCE ON COMMENT MODE TO
+*                                      LIST CNTL STMT CONTINUATION(S)
+         CLI   0(R1),C'/'              FOUND '/' ?
+         BNE   UMDIRQA                 NO, NO BEGIN COMMENT
+         CLI   1(R1),C'*'              FOUND /* ?
+         BNE   UMDIRQA                 NO, NO BEGIN COMMENT
+UMDIRQB  OI    FLAGS,SCOMM             YES, FOUND START OF COMMENT
+*
+*        DISCARD ALL SRC RECORDS AS THEY MAY CONTAIN /*..*/ COMMENTS
+*
+UMDIRQA  CLC   0(5,R8),=C'++MAC'       FOUND A ++MAC CONTROL STMT ?
+         BE    UMDIRQC                 NO, BRANCH
+         CLC   0(5,R8),=C'++SRC'       FOUND A ++SRC CONTROL STMT ?
+         BE    UMDIRQC                 NO, BRANCH
+         CLC   0(5,R8),=C'++UPD'       FOUND A ++UPD CONTROL STMT ?
+         BNE   UMDIRI                  NO, BRANCH
+UMDIRQC  OI    FLAGS,MACSUP            DISCARD ALL FOLLOWING TEXT
+*                                      UNTIL NEXT UMD CONTROL STMT
+*
+*        INCREMENT TO NEXT RECORD
+*
+UMDIRI   AH    R8,DCBLRECL             POINT TO NEXT RECORD
+         CR    R8,R7                   EXCEEDED THE BLOCK LENGTH ?
+         BL    UMDIRQ                  NO, PROCESS NEXT RECORD
+         B     UMDIRN                  YES, READ NEXT BLOCK
+*
+UMDIRP   CLI   0(R8),C' '              RECORD BEGIN WITH NON PRINTABLE
+*                                      CHARACTER IE TXT RECORD ?
+         BL    UMDIRI                  YES, DISCARD RECORD
+         TM    FLAGS,MACSUP            DISCARD TEXT ?
+         BO    UMDIRI                  YES, DISCARD RECORD
+         TM    FLAGS,CFOUND            PROCESSED ANY CONTROL RECORDS ?
+         BNO   UMDIRI                  NO, CONTINUE FLUSHING
+         TM    FLAGS,SCOMM             IN COMMENT TEXT ?
+         BO    UMDIRPA                 YES, BRANCH
+         TRT   0(72,R8),TRANSTAB       NO, SCAN FOR '/'
+         BZ    UMDIRI                  NO '/', DISCARD RECORD
+         CLI   0(R1),C'/'              FOUND /* ?
+         BNE   UMDIRI                  NO, DISCARD RECORD
+         CLI   1(R1),C'*'              FOUND /* ?
+         BNE   UMDIRI                  NO, DISCARD RECORD
+         OI    FLAGS,SCOMM             YES, FOUND BEGIN COMMENT
+         BAS   R14,GENREC              GENERATE RTF RECORD
+         B     UMDIRI                  GO PROCESS NEXT RECORD
+*
+UMDIRPA  BAS   R14,GENREC              GENERATE RTF RECORD
+         TRT   0(72,R8),TRANSTAB       SCAN FOR '/'
+         BZ    UMDIRI                  GO PROCESS NEXT RECORD
+         CLI   0(R1),C'/'              FOUND '/' ?
+         BNE   UMDIRI
+         BCTR  R1,0                    BACK OFF 1 BYTE
+         CLI   0(R1),C'*'              CLOSING COMMENT */ ?
+         BNE   UMDIRI                  NO, GO PROCESS NEXT RECORD
+         NI    FLAGS,255-SCOMM         YES, TURN OFF IN COMMENTS TEXT
+         B     UMDIRI                  GO PROCESS NEXT RECORD
+*
+*        END OF MEMBER
+*
+*        FREE I/O AREA AND CLOSE DATA SET
+*
+UMDIRMX  LH    R0,DCBBLKSI             L'I/O AREA
+         L     R1,BLKADDR              R1 -> I/O AREA
+*
+         FREEMAIN R,LV=(0),A=(1)       FREE I/O AREA
+*
+         CLOSE (SYSLIB)
+*
+*        FREE THE USERMOD DATASET AS NO LONGER REQUIRED
+*
+         LA    R6,DYNAREA+4        R6 -> S99RB
+         USING S99RB,R6
+         XC    S99RB(S99RBEND-S99RB),S99RB  ZERO ALL OF RB
+         MVI   S99RBLN,S99RBEND-S99RB  SET LENGTH OF RB
+         MVI   S99VERB,S99VRBUN        REQUEST UNALLOCATION VERB
+         LA    R7,S99RB+(S99RBEND-S99RB) R7 -> TEXT UNIT PTRS
+         USING S99TUPL,R7          ADDRESSABILITY FOR S99TUPL DSECT
+         ST    R7,S99TXTPP         S99TXTPP - > FIRST TEXT UNIT PTR
+*
+*        ALLOW FOR A MAX OF 12 TEXT UNIT PTRS AND THEN STORE THE
+*        ACTUAL TEXT UNITS AFTER THE TU PTRS IN DYNAREA
+*
+         LA    R8,12*4(,R7)        R8 -> TEXT UNIT AREA
+         USING S99TUNIT,R8
+
+*        R7 -> S99TUPL             LIST OF PTRS TO TEXT UNITS
+*        R8 -> S99TUNIT            TEXT UNITS AND THE ASSOCIATED DATA
+*
+*        DDNAME SPECIFICATION KEY AND DDNAME PARM
+*
+         ST    R8,S99TUPTR         STORE ADDR OF TEXT UNIT IN PTR LIST
+         LA    R7,4(,R7)           INCREMENT S99TUPL TO NEXT ENTRY
+         MVC   S99TUKEY(#DDNAMAL),#DDNAMA    MOVE DDNAME KEY SPEC
+         MVC   S99TUPAR(L'UMODDDN),UMODDDN   MOVE IN DDNAME
+         LA    R8,L'UMODDDN+6(,R8)  INCR PTR
+*
+*        UNALLOCATE EVEN IF PERMANTLY ALLOCATED SPECIFICATION
+*
+         ST    R8,S99TUPTR         STORE ADDR OF TEXT UNIT IN PTR LIST
+         MVC   S99TUKEY(#UNALCL),#UNALC  MOVE DDNAME KEY SPEC
+*
+         OI    S99TUPTR,S99TUPLN   LAST ENTRY, TERMINATE LIST
+         LA    R1,DYNAREA          R1 -> S99RBPTR
+*
+         DYNALLOC
+*
+         LTR   R15,R15             SUCCESSFUL DELETION ?
+         BNZ   UMDERR8F            NO, BRANCH TO ERROR PROCESSING
+*
+*        DETERMINE IF THERE ARE MORE USERMOD DATA SETS TO PROCESS
+*
+UMDIRBY  L     R1,LOCWAP               R1 -> CURRENT DATA SET NAME
+         LA    R1,45(,R1)              INCR TO NEXT DSNAME
+         ST    R1,LOCWAP               SAVE NEW -> CURR DATA SET NAME
+         C     R1,LOCWAAE              ALL DATA SETS PROCESSED ?
+         BL    UMDIRBG                 NO, BRANCH TO BEGIN LOOP
+         MVC   RTFIO(L'#RTFTERM),#RTFTERM  YES
+         BAS   R14,GENWRIT             WRITE RTF TERMINATING RECORD
+*
+*---------------------------------------------------------------------
+*
+*        END OF PROGRAM CLEANUP
+*
+*---------------------------------------------------------------------
+*
+EOJ      LA    R10,SYSLIB
+         USING IHADCB,R10
+         TM    DCBOFLGS,DCBOFOPN       SYSLIB OPEN ?
+         BZ    EOJA                    NO, BRANCH
+         LH    R0,DCBBLKSI             L'I/O AREA
+         ICM   R1,B'1111',BLKADDR      R1 -> I/O AREA
+         BZ    EOJB                    NO I/O AREA, BYPASS FREEMAIN
+*
+         FREEMAIN R,LV=(0),A=(1)       FREE I/O AREA
+*
+EOJB     CLOSE (SYSLIB)
+*
+EOJA     L     R0,LOCWAL
+         ICM   R1,B'1111',LOCWAA
+         BZ    EOJC
+*
+         FREEMAIN R,LV=(0),A=(1)       FREE LOCATE RESULT AREA
+*
+EOJC     LA    R10,RTFOUT
+         TM    DCBOFLGS,DCBOFOPN       RTFOUT OPEN ?
+         BZ    EOJD                    NO
+*
+         CLOSE (RTFOUT)
+*
+         FREEPOOL RTFOUT
+*
+EOJD     B     UMDIRX
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE RTF RECORD GROUP
+*
+*---------------------------------------------------------------------
+*
+*        ON ENTRY R6 -> TEXT BLOCK
+*
+GENRECS  ST    R14,SAVEGEN
+         SR    R9,R9
+GENRECA  ICM   R9,B'0001',0(R6)        GET L'TEXT RECORD
+         BZ    GENRECX                 END OF GROUP TEXT YES, BRANCH
+         BCTR  R9,0
+         EX    R9,MVCREC               MOVE RECORD INTO I/O AREA
+         BAS   R14,GENWRIT
+         LA    R6,2(R6,R9)             R6 -> NEXT RECORD
+         B     GENRECA                 LOOP
+*
+GENRECX  L     R14,SAVEGEN             RESTORE RETURN ADDR
+         BR    R14                     RETURN TO CALLER
+*
+MVCREC   MVC   RTFIO(0),1(R6)          MOVE RECORD INTO I/O AREA
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE RTF HEADING RECORDS
+*
+*---------------------------------------------------------------------
+*
+GENHEAD  ST    R14,SAVEHEAD
+         LA    R6,#MODGRP
+         MVC   #MODHEAD+33(7),UMODDDN  MOVE IN USER MOD NAME
+         MVC   #MODTC+12(7),UMODDDN    MOVE IN USER MOD NAME
+         BAS   R14,GENRECS
+         L     R14,SAVEHEAD            RESTORE RETURN ADDR
+         BR    R14                     RETURN TO CALLER
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE RTF INDEX RECORDS READ IN FROM SYSIN
+*
+*---------------------------------------------------------------------
+*
+GENINDX  ST    R14,SAVEHEAD
+         LA    R2,RTFIO                R2 -> I/O AREA
+         LA    R3,L'#INDEXH
+         LA    R4,#INDEXH
+         LR    R5,R3
+         MVCL  R2,R4                   MOVE IN HEADER
+*
+*        TRIM INPUT RECORD
+*
+         LA    R4,SYSINREC+1           R4 -> FIRST BYTE OF INDEX
+         LA    R5,22                   R5 = L'MAX OF INDEX TEXT
+GENINDXT LA    R15,0(R4,R5)            R15 -> RIGHTMOST SCAN POSITION+1
+         BCTR  R15,0                   R15 -> LAST BYTE OF INPUT STRING
+         CLI   0(R15),C' '             BLANK CHAR ?
+         BNE   GENINDXA                NO, END OF TRIM
+         CR    R4,R15                  TESTED LEFTMOST CHAR ?
+         BE    GENINDXX                YES, ALL BLANK
+         BCT   R5,GENINDXT             RE-ENTER SCAN LOOP
+*
+GENINDXA LR    R7,R5                   SAVE FOR LATER USE
+         LR    R3,R5
+         MVCL  R2,R4                   MOVE IN INDEX TEXT
+         LA    R4,#INDEXT
+         LA    R5,L'#INDEXT
+         LR    R3,R5                   SET L'MOVE
+         MVCL  R2,R4                   MOVE IN RTF PARA TEXT
+         BAL   R14,GENWRIT             WRITE RTF RECORD
+         LA    R2,RTFIO                R2 -> I/O AREA
+         LA    R3,L'#INDEXC
+         LA    R4,#INDEXC
+         LR    R5,R3
+         MVCL  R2,R4                   MOVE IN TOC TEXT
+         LA    R4,SYSINREC+1           R4 -> FIRST BYTE OF INDEX
+         LR    R5,R7
+         LR    R3,R5
+         MVCL  R2,R4                   MOVE IN TOC NAME
+         MVI   0(R2),C'}'              TERMINATE RTF TOC TEXT
+         BAL   R14,GENWRIT             WRITE RTF RECORD
+GENINDXX LA    R6,#INDEXR
+         BAS   R14,GENRECS             FORMAT TEXT AFTER INDEX
+         L     R14,SAVEHEAD            RESTORE RETURN ADDR
+         BR    R14                     RETURN TO CALLER
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE A RTF COMMENT RECORD
+*
+*---------------------------------------------------------------------
+*
+*        ON ENTRY -
+*        R8 -> INPUT RECORD
+*
+GENREC   ST    R14,SAVEREC
+         MVC   RTFIO(72),0(R8)              MOVE RECORD INTO I/O AREA
+         TR    RTFIO(72),PROTRTF            PROTECT RTF SCANNER FROM
+*                                           ANY IMBEDDED RTF CONTROL
+*                                           CHARS IN THE INPUT DATA
+         BAS   R14,GENWRIT
+         MVC   RTFIO(L'#RTFLINE),#RTFLINE   IDENTIFY RECORD AS NORMAL
+         BAS   R14,GENWRIT                  LINE
+         L     R14,SAVEREC                  RESTORE RETURN ADDR
+         BR    R14                          RETURN TO CALLER
+*
+*---------------------------------------------------------------------
+*
+*        WRITE RECORDS TO RTF DATA SET
+*
+*---------------------------------------------------------------------
+*
+GENWRIT  ST    R14,SAVEWRIT
+*
+         PUT   RTFOUT,RTFIO
+*
+         MVI   RTFIO,C' '
+         MVC   RTFIO+1(L'RTFIO-1),RTFIO     BLANK I/O AREA
+         L     R14,SAVEWRIT                 RESTORE RETURN ADDR
+         BR    R14                          RETURN TO CALLER
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE ERROR MESSAGE 1 SYSLIB USERMOD DDNAME) OPEN FAILURE
+*
+*---------------------------------------------------------------------
+*
+UMDERR1  MVC   EMSG1DDN,UMODDDN        MOVE IN DDNAME
+         LA    R2,EMSG1
+         B     UMDWTO
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE ERROR MESSAGE 2 I/O ERROR ON SYSLIB
+*
+*---------------------------------------------------------------------
+*
+UMDERR3  MVC   EMSG3DDN,UMODDDN        MOVE IN DDNAME
+         LA    R2,EMSG3
+         B     UMDWTO
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE ERROR MESSAGE 5 SYSIN OPEN FAILURE
+*
+*---------------------------------------------------------------------
+*
+UMDERR5  LA    R2,EMSG5
+         B     UMDWTO
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE ERROR MESSAGE 7 LOCATE FAILURE
+*
+*---------------------------------------------------------------------
+*
+UMDERR7  LA    R1,GENLOC               R1 -> CCTGPL
+         USING CTGPL,R1                ADDRESSABILITY
+         ST    R15,WORKD               FORMAT R15 VALUE
+         UNPK  EMSG7R15,WORKD(5)
+         TR    EMSG7R15(8),HEXTAB-240
+         MVI   EMSG7R15+8,C' '
+         UNPK  EMSG7RC,CTGFDBK(3)      FORMAT CTGFDBK FIELD
+         TR    EMSG7RC(4),HEXTAB-240
+         MVI   EMSG7RC+2,C' '
+         MVC   EMAG7IM,CTGMODID        ISSUING MODULE
+         LA    R2,EMSG7
+         B     UMDWTO
+*
+         DROP  R1
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE ERROR MESSAGE 8 DYNALLOC FAILURE
+*
+*---------------------------------------------------------------------
+         USING S99RB,R6
+         USING S99TUPL,R7             ADDRESSABILITY FOR S99TUPL DSECT
+         USING S99TUNIT,R8
+*
+UMDERR8A LA    R1,KALLOC              DYNALLOC ALLOCATION ENTRY POINT
+         B     UMDERR8B
+*
+UMDERR8F LA    R1,KFREE               DYNALLOC FREE ENTRY POINT
+UMDERR8B STH   R15,WORKD              SAVE R 15 RETURN CODE
+         MVC   EMSG8A,0(R1)           ALLOC OR FREE
+         L     R7,S99TXTPP            R7 -> FIRST TEXT POINTER (DDNAME)
+         L     R8,S99TUPTR
+         MVC   EMSG8C,S99TUPAR        MOVE FAILING DDNAME INTO MSG
+         UNPK  EMSG8D(5),WORKD(3)     FORMAT RETURN CODE
+         TR    EMSG8D(4),HEXTAB-240
+         MVI   EMSG8D+L'EMSG8D,C','
+         UNPK  EMSG8E(5),S99ERROR(3)  FORMAT S99ERROR
+         TR    EMSG8E(4),HEXTAB-240
+         MVI   EMSG8E+L'EMSG8E,C','
+         UNPK  EMSG8F(5),S99INFO(3)   FORMAT S99INFO
+         TR    EMSG8F(4),HEXTAB-240
+         MVI   EMSG8F+L'EMSG8F,C' '
+         LA    R2,EMSG8
+         B     UMDWTO
+*
+         DROP  R6,R7,R8
+*
+*---------------------------------------------------------------------
+*
+*        GENERATE PROGRAM ERROR MESSAGE
+*
+*---------------------------------------------------------------------
+*
+INTERR   LA    R14,0(,R14)
+         SR    R14,R11                 CALC OFFSET INTO PROGRAM
+         ST    R14,WORKD               FORMAT R14 VALUE
+         UNPK  EMSG9O(7),WORKD+1(4)
+         TR    EMSG9O(6),HEXTAB-240
+         MVI   EMSG9O+6,C' '
+         LA    R2,EMSG9
+         B     UMDWTO
+*
+*---------------------------------------------------------------------
+*
+*        SYSLIB SYNAD ERROR EXIT PROCESSING
+*
+*---------------------------------------------------------------------
+*
+SYSSYN   SYNADAF ACSMETH=QSAM
+*
+*        MOVE SYNADAF MESSAGE TO WTO TEXT FIELD
+*
+         LR    R3,R1                   SAVE R1 UNTIL WTO FINISH
+*
+*        FIRST LINE OF MESSAGE
+*
+         MVC   SYNERRT(L'EMSG2AT),EMSG2AT SET UP ERROR MESSAGE
+         MVC   SYNERRT+L'EMSG2AT(57),49(R3)
+*
+         WTO   MF=(E,WPL),TEXT=SYNERR
+*
+*        SECOND LINE OF MESSAGE
+*
+         MVI   SYNERRT,C' '
+         MVC   SYNERR+1(L'SYNERRT-1),SYNERRT
+         MVC   SYNERRT(L'EMSG2BT),EMSG2BT SET UP ERROR MESSAGE CONTIN
+         MVC   SYNERRT+L'EMSG2BT(22),106(R3)
+         WTO   MF=(E,WPL),TEXT=SYNERR
+         LR    R1,R3                   RESTORE SYNADAF MSG POINTER
+*
+         SYNADRLS
+*
+         MVI   RETCDE+3,16             SET RETURN CODE
+         B     UMDIRX
+*
+*---------------------------------------------------------------------
+*
+*        ISSUE ERROR MSG VIA WTO
+*
+*---------------------------------------------------------------------
+*
+UMDWTO   WTO     MF=(E,WPL),TEXT=(R2)
+*
+         MVI   RETCDE+3,16             SET RETURN CODE
+         B     EOJ                     GO CLEAN UP
+*
+*---------------------------------------------------------------------
+*
+*        NORMAL EXIT
+*
+*---------------------------------------------------------------------
+*
+UMDIRX   L      R15,RETCDE
+         L      R13,4(,R13)            RETURN TO CALLER
+*
+         RETURN (14,12),,RC=(15)
+*
+*---------------------------------------------------------------------
+*
+*        DATA AREAS
+*
+*---------------------------------------------------------------------
+*
+         DC    0D'0'
+GENLOC   DC    7F'0'                   28 BYTE CTGPL
+*        DATA FOR CTGENT
+HLQL     DC    AL1(L'HLQ)
+HLQ      DC    C'USERMOD.'             ALL DATA SETS WITH USERMOD AS
+*                                      HLQ
+LOCWAL   DC    F'32768'                32K AREA FOR RESULT FROM
+*        DATA FOR CTGWKA               GENERIC LOCATE
+LOCWAA   DC    A(0)                    -> LOCATE RESULT AREA
+*
+LOCWAAE  DC    A(0)                    -> END ADDR LOCATE RESULT AREA
+LOCWAP   DC    A(0)                    NEXT AVAILABLE ADDR IN LOCWAA
+*
+WORKD    DC    D'0'                    WORK AREA
+*
+UMODDSNL DC    F'0'                    L'USER MOD DATA SET NAME
+UMODDDNL DC    F'0'                    L'USERMOD DDNAME
+UMODDDN  DC    CL8' '                  USERMOD NAME ALSO USED AS
+*                                      THE DD NAME FOR DYNALLOC
+@CVRLET  DC    CL8'@CVRLET'            COVER LETTER MEMBER NAME
+$INSTALL DC    CL8'$INSTALL'
+*
+ATIOT    DC    A(0)                    <- TIOT
+BLKADDR  DC    A(0)                    -> GETMAINED SYSLIB I/O AREA
+RETCDE   DC    F'0'
+*
+RTFIO    DC    CL80' '                 OUTPUT I/O AREA FOR RTF TEXT
+SYSINREC DC    CL80' '                 INPUT AREA FOR SYSIN
+*
+*
+*        TRANSLATE TABLE FOR SCANNING FOR COMMENT START AND FINISH
+*        AND CONTROL STATEMENT TERMINATION
+*
+TRANSTAB DC    XL256'00'
+         ORG   TRANSTAB+C'.'
+         DC    X'01'
+         ORG   TRANSTAB+C'/'
+         DC    X'01'
+         ORG   TRANSTAB+256
+*
+*        TRANSLATE TABLE TO PROTECT RTF SCANNER
+*
+*        TRANSLATE - X'00' TO BLANK AS MANY PROGRAMS USE NULLS
+*                    BACKSLASH   (X'E0') TO /
+*                    LEFT BRACE  (X'C0') TO [
+*                    RIGHT BRACE (X'D0') TO ]
+*                    ALL NON GRAPHICS CHAR TO TILDA
+*
+PROTRTF  DC    X'40A1A1A1A1A1A1A1'   ~~~~~~~   00 -> 07
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   08 -> 0F
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   10 -> 17
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   18 -> 1F
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   20 -> 27
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   28 -> 2F
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   30 -> 37
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   38 -> 3F
+         DC    X'40A1A1A1A1A1A1A1'  ~~~~~~~~   40 -> 47
+         DC    X'A1A14A4B4C4D4E4F'  ~~¢.<(+×   48 -> 4F
+         DC    X'50A1A1A1A1A1A1A1'  &~~~~~~~   50 -> 57
+         DC    X'A1A15A5B5C5D5E5F'  ~~!$*);^   58 -> 5F
+         DC    X'6061A1A1A1A1A1A1'  -/~~~~~~   60 -> 67
+         DC    X'A1A16A6B6C6D6E6F'  ~~ ,%_>?   68 -> 6F
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   70 -> 77
+         DC    X'A1797A7B7C7D7E7F'  ~`:#@'="   78 -> 7F
+         DC    X'A181828384858687'  ~ABCDEFG   80 -> 87
+         DC    X'8889A1A1A1A1A1A1'  HI~~~~~~   88 -> 8F
+         DC    X'A191929394959697'  ~JKLMNOP   90 -> 97
+         DC    X'9899A1A1A1A1A1A1'  QR~~~~~~   98 -> 9F
+         DC    X'A1A1A2A3A4A5A6A7'  ~~STUVWX   A0 -> A7
+         DC    X'A8A9A1A1A1ADA1A1'  YZ~~~[~~   A8 -> AF
+         DC    X'A1A1A1A1A1A1A1A1'  ~~~~~~~~   B0 -> B7
+         DC    X'A1A1A1BBA1BDA1A1'  ~~~~~]~~   B8 -> BF
+         DC    X'ADC1C2C3C4C5C6C7'  [ABCDEFG   C0 -> C7
+         DC    X'C8C9A1A1A1A1A1A1'  HI~~~~~~   C8 -> CF
+         DC    X'BDD1D2D3D4D5D6D7'  ]JKLMNOP   D0 -> D7
+         DC    X'D8D9A1A1A1A1A1A1'  QR~~~~~~   D8 -> DF
+         DC    X'61A1E2E3E4E5E6E7'  /~STUVWX   E0 -> E7
+         DC    X'E8E9A1A1A1A1A1A1'  YZ~~~~~~   E8 -> EF
+         DC    X'F0F1F2F3F4F5F6F7'  01234567   F0 -> F7
+         DC    X'F8F9A1A1A1A1A1A1'  89~~~~~~   F8 -> FF
+*
+*        TRANSLATE TABLE TO SCAN FOR A BLANK
+*
+BLANKTB  DC    XL256'00'
+         ORG   BLANKTB+C' '
+         DC    C' '
+         ORG
+*
+FLAGS    DC    X'00'                   FLAGS
+CFOUND   EQU   X'80'                   CONTROL RECORD PROCESSED
+SCOMM    EQU   X'40'                   START OF COMMENT TEXT FOUND
+MACSUP   EQU   X'20'                   SUPRESS MACRO TEXT RECORDS
+COPYT    EQU   X'10'                   COPY TEXT FROM SYSIN TP RTF
+*
+*        WORK AREA FOR DYNAMIC ALLOCATION
+*
+         DC    0F'0'
+DYNAREA  DC    XL256'00'           ALLOW 256 BYTES FOR DYNALLOC PARMS
+         ORG   DYNAREA
+         DC    XL1'80'             SET S99RBPND
+         DC    AL3(DYNAREA+4)      SET S99RBPTR
+         ORG
+*
+*        DYNAMIC ALLOCATION TEXT UNITS
+*
+#DDNAMA  DC    AL2(DALDDNAM)       ALLOCATE DDNAME SPECIFICATION
+         DC    X'0001'             #
+         DC    X'0008'             LENGTH OF PARM DATA
+#DDNAMAL EQU   *-#DDNAMA           LENGTH OF KEY SPECIFICATION
+*
+#DSNAMA  DC    AL2(DALDSNAM)       ALLOCATE DSNAME SPECIFICATION
+         DC    X'0001'             #
+         DC    X'0000'             LENGTH OF PARM DATA
+#DSNAMAL EQU   *-#DSNAMA           LENGTH OF KEY SPECIFICATION
+*
+#STATUS  DC    AL2(DALSTATS)       DATA SET STATUS SPECIFICATION
+         DC    X'0001'             #
+         DC    X'0001'             LENGTH OF PARM DATA
+#STATUSL EQU   *-#STATUS           LENGTH OF KEY SPECIFICATION
+*
+#UNALC   DC    AL2(DUNUNALC)       DEALLOC EVEN IF PERMANENT ALLOC
+         DC    X'0000'             #
+#UNALCL  EQU   *-#UNALC            LENGTH OF KEY SPECIFICATION
+*
+*
+*---------------------------------------------------------------------
+*
+*        ERROR MESSAGES
+*
+*---------------------------------------------------------------------
+*
+EMSG1    DC    AL2(EMSG1X-EMSG1T)           DCB OPEN FAILURE MSG
+EMSG1T   DC    C'UMDIR01 - '
+EMSG1DDN DC    CL8' '
+         DC    C' OPEN FAILED'
+EMSG1X   EQU   *
+*
+EMSG2AT  DC    C'UMDIR02 I/O ERR'      SYNAD ERROR MESSAGES
+EMSG2BT  DC    C'UMDIR02 CONTINUED'
+*
+EMSG3    DC    AL2(EMSG3X-EMSG3T)
+EMSG3T   DC    C'UMDIR03 - '
+EMSG3DDN DC    CL8' '
+         DC    C'I/O ERR'
+EMSG3X   EQU   *
+*
+EMSG4    DC    AL2(L'EMSG4T)           FOR GENERATED RTF TEXT
+EMSG4T   DC    C'UMDIR04 - RTFOUT OPEN FAILED'
+*
+EMSG5    DC    AL2(L'EMSG5T)           FOR GENERATED RTF TEXT
+EMSG5T   DC    C'UMDIR05 - SYSIN OPEN FAILED'
+*
+EMSG7    DC    AL2(EMSG7X-EMSG7T)     LOCATE FAILURE
+EMSG7T   DC    C'UMDIR07 - LOCATE FAILED - R15 RETURN CODE -'
+EMSG7R15 DC    CL9'XXXXXXXX '
+         DC    C'REASON CODE = '
+EMSG7RC  DC    C'XXXX '
+         DC    C'ISSUING MODULE = '
+EMAG7IM  DC    C'XX'
+EMSG7X   EQU   *
+*
+EMSG8    DC    AL2(EMSG8X-EMSG8T)
+EMSG8T   DC    C'UMDIR08 - DYNALLOC ERROR,'
+EMSG8A   DC    CL5'      '             ALLOC OR FREE
+         DC    C','
+EMSG8C   DC    CL8' '                  DDNAME
+         DC    C',RC='
+EMSG8D   DC    CL4'    '               R15 RETURN CODE
+         DC    C',S99ERROR='
+EMSG8E   DC    CL4'    '
+         DC    C',S99INFO='
+EMSG8F   DC    CL4'    '
+EMSG8R   DC    CL40' '
+EMSG8X   EQU   *
+*
+EMSG9    DC    AL2(EMSG9X-EMSG9T)     PROGRAM ERROR
+EMSG9T   DC    C'UMDIR09 - PROGRAM ERROR AT OFFSET - '
+EMSG9O   DC    CL7'XXXXXX '
+EMSG9X   EQU   *
+*
+WPL      WTO   TEXT=,MF=L,ROUTCDE=(11),DESC=7
+*
+SYNERR   DC    AL2(L'SYNERRT)          SYNAD ERROR MSG AREA
+SYNERRT  DC    CL100' '
+*
+KALLOC   DC    CL5'ALLOC'          FOR ERROR MSG
+KFREE    DC    CL5'FREE '
+HEXTAB   DC    C'0123456789ABCDEF'
+*
+*
+*        SYSLIB DCB
+*
+         PRINT NOGEN
+*
+SYSLIB   DCB   DSORG=PO,MACRF=(R),DDNAME=SYSLIB,                       C
+               LRECL=80,RECFM=FB,                                      C
+               EODAD=UMDIRMX,SYNAD=SYSSYN
+*
+*        SYSIN DCB
+*
+SYSIN    DCB   DSORG=PS,MACRF=(GM),DDNAME=SYSIN,                       C
+               RECFM=F,LRECL=80,                                       C
+               EODAD=UMDIRSX
+*
+*        RTFOUT DCB
+*
+RTFOUT   DCB   DSORG=PS,MACRF=(PM),DDNAME=RTFOUT,LRECL=80,             C
+               RECFM=FB
+*
+         PRINT GEN
+*
+         READ  SYSDECB,SF,0,0,'S',MF=L
+*
+*        SAVE AREAS
+*
+SAVEA1   DC    18F'0'
+*
+SAVEREC  DC    A(0)                    SAVE ROUTINE RETURN ADDR
+SAVEHEAD DC    A(0)                    SAVE ROUTINE RETURN ADDR
+SAVEWRIT DC    A(0)                    SAVE ROUTINE RETURN ADDR
+SAVEGEN  DC    A(0)                    SAVE ROUTINE RETURN ADDR
+*
+*        PREAMBLE TEXT
+*
+*        THE TEXT RECORDS WILL BE WRITTEN TO THE RTFOUT DATA SET
+*
+PRETEXT  DC    AL1(L'#01)
+#01      DC    C'{\rtf1\ansi\ansicpg1252\deff0\deflang1033\uc1'
+         DC    AL1(L'#02)
+#02      DC    C'{\fonttbl'
+         DC    AL1(L'#03)
+#03      DC    C'{\f0\fmodern\fprq1\fcharset0 Consolas;}'
+         DC    AL1(L'#04)
+#04      DC    C'{\f1\fswiss\fcharset0 Arial;}}'
+         DC    AL1(L'#05)
+#05      DC    C'{\colortbl;'
+         DC    AL1(L'#06)
+#06      DC    C'\red47\green84\blue150;'
+         DC    AL1(L'#07)
+#07      DC    C'\red255\green0\blue0;'
+         DC    AL1(L'#07A)
+#07A     DC    C'\red0\green0\blue0;}'
+         DC    AL1(L'#08)
+#08      DC    C'{\stylesheet'
+         DC    AL1(L'#09)
+#09      DC    C'{\s1 \sbasedon0\f1\fs56\cf1\outlinelevel1 Heading1;}'
+         DC    AL1(L'#10)
+#10      DC    C'{\s2 \sbasedon0\f0\fs18\cf0\outlinelevel2 Normal;}}'
+         DC    AL1(#11X-#11)
+#11      DC    C'{\*\generator '
+#11JOBN  DC    CL8'XXXXXXXX'
+         DC    C' USERMODD'
+         DC    C' TK5 Usermod Directory;}'
+#11X     EQU   *
+         DC    AL1(L'#12)
+#12      DC    C'{\info{\title TK5 Usermod Directory}}'
+         DC    AL1(L'#13)
+#13      DC    C'\viewkind\'
+         DC    AL1(L'#14)
+#14      DC    C'{\sb600\par\f1\cf1\fs300'
+         DC    AL1(L'#15)
+#15      DC    C' TK5}'
+         DC    AL1(L'#16)
+#16      DC    C'{\par\sb2200\par\f1\cf1\fs80'
+         DC    AL1(L'#17)
+#17      DC    C'    Usermod Directory}'
+         DC    AL1(L'#18)
+#18      DC    C'{\par\sb700\par\f1\cf1\fs30'
+         DC    AL1(L'#19)
+#19      DC    C'                       \chdpa}'
+         DC    AL1(L'#20)
+#20      DC    C'\pard\plain\sect'
+         DC    AL1(L'#21)
+#21      DC    C'{\footer\pard\f1\fs16\cf1\brdrt\brdrs\brdrw10\brsp20 {X
+               \fs4\~}'
+         DC    AL1(L'#22)
+#22      DC    C'TK5 Usermod Directory Page \chpgn\par}'
+         DC    AL1(L'#23)
+#23      DC    C'\pard\plain\par\f1\cf1\fs48 Contents\par\pard\plain'
+         DC    AL1(L'#24)
+#24      DC    C'\f0\fs18\cf2'
+         DC    AL1(L'#25)
+#25      DC    C'{\field\fldedit{\*\fldinst{ TOC \\fc \\h }}'
+         DC    AL1(L'#26)
+#26      DC    C'{\fldrslt Update Field to show Table of Contents}}'
+         DC    AL1(0)              TERMINATE PREAMBLE TEXT GROUP
+*
+*        MODULE HEADER GROUP
+*
+#MODGRP  DC    AL1(L'#MODHEAD)
+#MODHEAD DC    C'\sect\pard\plain\par\f1\cf1\fs48 ZZZZZZZ\par\pard\plaiX
+               n'
+*        TABLE OF CONTENTS ENTRY
+         DC    AL1(L'#MODTC)
+#MODTC   DC    C'{\tc \v \fc ZZZZZZZ}'
+*        FORMAT COMMENT TEXT
+         DC    AL1(L'#MODFMT)
+#MODFMT  DC    C'\pard\par\f0\cf0\fs18'      CONSOLAS NON PROP FONT
+         DC    AL1(0)             TERMINATE MODULE HEADER TEXT GROUP
+*
+*        INDEX HEADER GROUP USED FOR SYSIN DATA
+*
+#INDEXH  DC    C'\sect\pard\plain\par\f1\cf1\fs48 '
+#INDEXT  DC    C'\par\pard\plain'
+*        TABLE OF CONTENTS ENTRY
+#INDEXC  DC    C'{\tc \v \fc '
+*        FORMAT COMMENT TEXT
+#INDEXR  DC    AL1(L'#INDEXF)
+#INDEXF  DC    C'\pard\par\f0\cf3\fs20'       ARIAL FONT BLACK
+         DC    AL1(0)             TERMINATE MODULE HEADER TEXT GROUP
+*
+*        RTF CONTROL RECORDS
+*
+#RTFLINE DC    C'\line'
+#RTFTERM DC    C'}'
+*
+*        LITERAL POOL
+*
+         LTORG
+*
+         IEZBITS
+*
+*        SPF PDS DIRECTORY ENTRY IN PDS DIRECTORY BLOCK
+*
+SDE      DSECT
+SDENAME  DS    CL8                 MEMBER NAME
+SDETTR   DS    XL3                 MEMBER TTR
+SDEINDC  DS    XL1                 INDICATOR BYTE WITH L'USER DATA
+SDEALIS  EQU   BIT0                MEMBER NAME IS AN ALIAS
+SDENTTR  EQU   BIT1+BIT2           NO. OF TTR'S IN THE USER DATA FIELD
+SDELUSR  EQU   BIT3+BIT4+BIT5+BIT6+BIT7   LENGTH OF USER DATA FIELD
+*                                  IN HALF WORDS
+SDEVERS  DS    AL1                 VERSION NUMBER
+SDEMOD   DS    AL1                 MODIFICATION LEVEL
+SDEFLAGS DS    AL1                 FLAGS
+SDEFSCLM EQU   BIT0                UNDER THE CONTROL OF SCLM
+SDEFXST  EQU   BIT2                EXTENDED ISPF STATS EXIST
+*                                  BITS 1, 3-7 RESERVED
+SDEMSECS DS    PL1                 SECONDS PORTION OF TIME MODIFIED
+SDECCIND DS    XL1                 MEMBER CREATION DATE - CENTURY IND
+SDECDAT  DS    PL3                 MEMBER CREATION DATE
+SDEMCIND DS    XL1                 MEMBER LAST MODIFIED - CENTURY IND
+SDEMDAT  DS    PL3                 MEMBER LAST MODIFIED
+SDEMTIM  DS    XL2                 TIME OF LAST UPDATE
+*
+SDECREC  DS    AL2                 CURRENT RECORD COUNT
+SDEIREC  DS    AL2                 INITIAL RECORD COUNT
+SDEMREC  DS    AL2                 NUMBER OF MODIFIED RECORDS
+SDEUID   DS    CL7                 TSO USERID OF LAST UPDATE
+         DS    CL1                 RESERVED
+*                                  ONLY PRESENT IF SDEFXST IS ON
+SDECRECX DS    AL4                 EXTENDED CURRENT RECORD COUNT
+SDEIRECX DS    AL4                 EXTENDED INITIAL RECORD COUNT
+SDEMRECX DS    AL4                 EXTENDED NUMBER OF MODIFIED RECORDS
+SDELEN   EQU   *-SDE               LENGTH OF ENTRY
+*
+         PRINT NOGEN
+*
+         DCBD  DSORG=(BS),DEVD=DA
+*
+         IHADECB
+*
+*        MAP TIOT
+*
+TIOT     DSECT
+*
+         IEFTIOT1
+*
+*        DYNAMIC ALLOCATION
+*
+         IEFZB4D0
+*
+         IEFZB4D2
+*
+         PRINT GEN
+*
+*        REGISTER AND BIT EQUATES
+*
+*
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+*
+CTGPL    DSECT
+*
+*/********************************************************************/
+*/*                                                                  */
+*/*   IEZCTGPL                                                       */
+*/*                                                                  */
+*/*   DESCRIPTIVE NAME = CATALOG PARAMETER LIST                      */
+*/*                                                                  */
+*/*   FUNCTION = THE CATALOG PARAMETER LIST (CTGPL) DEFINES THE      */
+*/*              CATALOG MANAGEMENT REQUEST AND ITS OPTIONS, THE     */
+*/*              CATALOG RECORD TO BE PROCESSED, AND THE VSAM        */
+*/*              CATALOG THAT CONTAINES THE RECORD.  THE CTGPL IS    */
+*/*              BUILT BEFORE AN OS/VS COMPONENT ISSUES THE CATLG    */
+*/*              MACRO INSTRUCTION (SVC 26) TO PROCESS A CATALOG     */
+*/*              RECORD.  WHEN THE CATALOG MANAGEMENT ROUTINES       */
+*/*              BUILD A CCA TO SUPPORT THE REQUEST, THE ADDRESS     */
+*/*              OF THE CTGPL IS PUT INTO THE CCA (CCACPL).          */
+*/*                                                                  */
+*/*   CONTROL BLOCK STRUCTURE = THE CTGPL IS POINTED TO BY R1        */
+*/*                                                                  */
+*/*   INCLUDED MACROS = NONE                                         */
+*/*                                                                  */
+*/********************************************************************/
+*
+*        FIRST OPTION INDICATOR BYTE
+*
+CTGOPTN1 DS    XL1
+CTGBYPSS EQU   X'80'                    BYPASS
+CTGMAST  EQU   X'40'                    VERIFY MASTER PASSWORD
+CTGCI    EQU   X'20'                    VERIFY CONTROL INDICATOR
+CTGUPD   EQU   X'10'                    VERIFY UPDATE
+CTGREAD  EQU   X'08'                    VERIFY READ
+CTGNAME  EQU   X'04'                    1 - 44-BYTE NAME OR VOLSER
+*                                       0 - ENTRY ID NUMBER
+CTGCNAME EQU   X'02'                    1 - 44-BYTE NAME
+*                                       0 - ACB ADDRESS
+CTGGENLD EQU   X'01'                    GENERIC LOCATE REQUEST
+*
+*        SECOND OPTION INDICATOR BYTE
+*
+CTGOPTN2 DS    XL1
+CTGEXT   EQU   X'80'                    EXTEND(UPDATE)
+CTGNSVS  EQU   X'80'                    CATLG CLEANUP REQUEST
+CTGERASE EQU   X'40'                    ERASE(DELETE)
+CTGSMF   EQU   X'40'                    WRITE SMF(LSPACE)
+CTGREL   EQU   X'40'                    RELEASE(UPDATE)
+CTGGTALL EQU   X'40'                    CONCAT SEARCH (LISTCAT)
+CTGGFLIC EQU   X'40'                    SRCH ONLY 1 CAT(GFL)
+CTGPURG  EQU   X'20'                    PURGE (DELETE)
+CTGVMNT  EQU   X'20'                    VOLUME MOUNT CALLER
+CTGRCATN EQU   X'20'                    RTN CAT NAME(GLOC)
+CTGSWAP  EQU   X'20'                    SWAPSPACE (DEFINE)
+CTGGTNXT EQU   X'10'                    GET NEXT (LIST CTLG)
+CTGUCRAX EQU   X'10'                    UCRA EXTEND OPTION
+CTGDELRC EQU   X'10'                    DELETE RECOVER
+CTGDISC  EQU   X'08'                    DISCONNECT (DELETE)
+CTGRESM  EQU   X'08'                    GFL RESUME FUNCTION
+CTGOVRID EQU   X'04'                    ERASE OVERRIDE (DELETE)
+CTGCNVTC EQU   X'04'                    CONVERT CAT (DELETE SPACE)
+*
+CTGSCR   EQU   X'02'                    SCRATCH SPACE (DELETE)
+CTGCDI   EQU   X'02'                    DATA INDEX ARE MATCHES IF ITS
+*                                       CLUSTER/AIX MATCHES FILTER KEY
+*
+CTGBOTH  EQU   X'01'                    CALLER CAN ACCEPT ICF CATALOG
+*                                       ARCHITECTURE
+*
+*        THIRD OPTION INDICATOR BYTE
+*
+CTGOPTN3 DS    XL1
+CTGFUNC  EQU   X'E0'                    HIGH ORDER THREE BITS DEFINE
+*                                       FUNCTION
+*   LOCATE     -   001* ****
+CTGLOC   EQU   X'20'                    LOCATE - BITS ON
+*   LSPACE     -   010* ****
+CTGLSP   EQU   X'40'                    LSPACE - BITS ON
+*   UPDATE     -   011* ****
+CTGUPDAT EQU   X'60'                    UPDATE - BITS ON
+*   CMS FUNCTION - 100* ****
+CTGCMS   EQU   X'80'                    CMS FUNCTION - BITS ON
+*   GFL FUNCTION - 101* ****
+CTGGFL   EQU   X'A0'                    GFL FUNCTION - BITS ON
+*
+CTGSUPLT EQU   X'10'                    SUPER LOCATE
+CTGGDGL  EQU   X'08'                    GDG LOCATE FUNCTION (CTGWAGB IN
+*                                       CTGWA)
+CTGSRH   EQU   X'04'                    0 - SEARCH MASTER CAT ONLY
+*                                       1 - SEARCH OS CAT FIRST
+CTGNUM   EQU   X'02'                    0 - SEARCH BOTH CATALOGS
+*                                       1 - SEARCH ONE CATALOG
+CTGAM0   EQU   X'01'                    VSAM REQ VERSUS NONVSAM
+*
+*        FOURTH OPTION INDICATOR BYTE
+*
+CTGOPTN4 DS    XL1
+CTGLBASE EQU   X'80'                    LOCATE GDG BASE ONLY
+CTGNDISC EQU   X'80'                    DELETE CATALOG NO DISCONNECT
+*
+CTGNOCON EQU   X'80'                    DEFINE CATALOG NO CONNECT
+CTGDOCAT EQU   X'40'                    DO NOT OPEN NEEDED CATLG
+CTGNPROF EQU   X'20'                    NO (RAC) PROFILE SHOULD BE
+*                                       DEFINED OR DELETED
+CTGCOIN  EQU   X'10'                    CONTROLLER INTERCEPT REQUESTED
+*
+CTGBYPMT EQU   X'08'                    BYPASS SECURITY PROMPTING TO
+*                                       SYSTEM OPERATOR
+CTGTIOT  EQU   X'04'                    CALLER OWNS SYSZTIOT EXCLUSIVE
+CTGICFC  EQU   X'02'                    REQUEST ORIENTED TO ICF CATALOG
+*
+CTGICFOR EQU   X'01'                    ICF ONLY REQUEST
+*
+*        PARAMETER ADDRESSES
+*
+CTGENT   DS    0A                       USER ENTRY ADDRESS OR POINTER
+*                                       TO VOLUME SERIAL NUMBER(LSPACE)
+CTGFVT   DS    A                        FVT ADDRESS (DEFINE, ALTER)
+CTGCAT   DS    0A                       CATALOG POINTER
+*
+CTGCVOL  DS    A                        CVOL PTR (SUPER LOCATE)
+*
+CTGWKA   DS    A                        WORKAREA ADDRESS
+*
+CTGDSORG DS    CL2                      DATA SET ORG (SUPER LOCATE)
+*   BITS 0-4 DEFINE ORGANIZATION
+CTGOPTNS EQU   X'F8'                    TOP 5 BITS
+*   DEFINE          - 0000 1*** **** ****
+CTGDEFIN EQU   X'08'                    DEFINE
+*   ALTER           - 0001 0*** **** ****
+CTGALTER EQU   X'10'                    ALTER
+*   DELETE          - 0001 1*** **** ****
+CTGDELET EQU   X'18'                    DELETE
+*   LIST CATALOG    - 0010 0*** **** ****
+CTGLTCAT EQU   X'20'                    LIST CATALOG
+*   CONVERTV        - 0011 0*** **** ****
+CTGCNVTV EQU   X'30'                    CONVERTV
+*   CAS CAT OPEN    - 0011 1*** **** ****
+CTGOPEN  EQU   X'38'                    CAS CAT OPEN
+*   CAS CAT CLOSE   - 0100 0*** **** ****
+CTGCLOSE EQU   X'40'                    CAS CAT CLOSE
+*   CAS CAT VVDS    - 0100 1*** **** ****
+CTGVVDS  EQU   X'48'                    CAS CAT VVDS
+CTGF2WKA EQU   X'04'                    FORMAT 2 WORK AREA
+CTGXWAL  EQU   CTGF2WKA                 CPE ALIAS FOR ABOVE
+CTGVVRUP EQU   X'02'                    VVDS UPDATE ONLY
+CTGF2SEN EQU   X'01'                    CAN HANDLE 40-2 RC
+CTGFVFY  EQU   X'80'                    FORCE PASSWORD VERIFICATION -
+*                                       DO NOT CHECK FOR AUTHORIZED
+*                                       CALLER
+CTGHDLET EQU   X'40'                    HSM HAS DELETED A MIGRATED
+*                                       DATA SET
+CTGHALTL EQU   X'20'                    LOCATE FROM ALTER
+CTGHDLTL EQU   X'10'                    LISTCAT FROM DELETE
+CTGBRCAT EQU   X'08'                    BRANCH ENTRY TO IGGOCLAH -
+*                                       RESTRICTED TO KEY ZERO USE AND
+*                                       CMS FUNCTIONS CTGOPEN,
+*                                       CTGCLOSE, AND CTGVVDS.
+*
+*   BITS 13-15 RESERVED
+*
+CTGTYPE  DS    CL1                      ENTRY TYPE-LISTCAT,DELETE
+CTGTALIN EQU   C'A'                     ALIEN - A
+CTGTGBS  EQU   C'B'                     GDG BASE - B
+CTGTCL   EQU   C'C'                     CLUSTER - C
+CTGTDATA EQU   C'D'                     DATA - D
+CTGTFREE EQU   C'F'                     FREE - F
+CTGTAIX  EQU   C'G'                     ALTERNATE INDEX - G
+CTGTGDS  EQU   C'H'                     GDS - H
+CTGTINDX EQU   C'I'                     INDEX - I
+CTGTVVR  EQU   C'K'                     VSAM VOLUME RECORD
+CTGTMCAT EQU   C'M'                     MASTER CATALOG - M
+CTGTPGSP EQU   C'P'                     PAGE SPACE - P
+CTGTPATH EQU   C'R'                     PATH - R
+CTGTPTH  EQU   C'R'                     PATH - R
+CTGTTNAM EQU   C'T'                     ICF TRUE NAME
+CTGTUCAT EQU   C'U'                     USER CATALOG - U
+CTGTVOL  EQU   C'V'                     VOLUME - V
+CTGTANM  EQU   C'X'                     ALIAS BASE -X
+CTGTUPG  EQU   C'Y'                     UPGRADE - Y
+CTGTJES3 EQU   X'01'                    JES3 SUPERLOCATE REQUEST
+CTGMULTY EQU   X'FF'                    MULTIPLE TYPES
+*
+CTGNOFLD DS    XL1                      NUMBER FIELD POINTERS
+CTGDDNM  DS    0A                       DD NAME ADDRESS
+CTGNEWNM DS    0A                       NEWNAME ADDRESS - ALTER
+CTGFILTR DS    0A                       GFL FILTER KEY ADDRESS
+CTGPROB  DS    0XL4                     PROBLEM DETERMINATION
+CTGMODID DS    0CL2                     MODULE IDENTIFICATION
+CTGFDBK  DS    XL2                      SUPER LOCATE FEEDBACK
+CTGFBFLG DS    0XL2                     SUPER LOCATE FLAGS
+CTGREASN DS    0XL2                     ERROR REASON CODE
+CTGREAS1 DS    XL1                      HIGH ORDER BYTE ZERO
+CTGPAR   EQU   X'80'                    PARALLEL MOUNT - SUPER LOC
+CTGKEEP  EQU   X'40'                    FORCED KEEP = SUPER LOCATE
+CTGGDGB  EQU   X'20'                    GDG BASE LOCATED
+CTGNGDSN EQU   X'10'                    GDG NAME GENERATED
+CTGCLV   EQU   X'08'                    CANDIDATE VOLUME LIST
+*        6-8  RESERVED
+CTGREAS2 DS    XL1                      REASON CODE LOW BYTE
+*
+CTGJSCB  DS    0A                       JSCB ADDRESS
+CTGPSWD  DS    A                        PASSWORD ADDRESS
+CTGFIELD DS    A                        FIELD POINTERS - MAY BE MORE
+*                                       THAN ONE
+CTGPLLEN EQU   *-CTGPL                  LENGTH OF CTG WITH ONE FIELD
+*                                       POINTER
+         END   USERMODD

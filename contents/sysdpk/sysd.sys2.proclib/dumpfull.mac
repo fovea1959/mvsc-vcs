@@ -1,0 +1,19 @@
+//DUMPFULL PROC
+//* ***************************************************************** *
+//* CLEAR DUMP ALL DUMP DATASETS                                       *
+//* ***************************************************************** *
+//E00     EXEC PGM=IEBGENER
+//SYSPRINT  DD SYSOUT=*
+//SYSIN     DD DUMMY
+//SYSUT1    DD DUMMY,DCB=(RECFM=U,LRECL=10,BLKSIZE=10)
+//SYSUT2    DD DISP=SHR,DSN=SYS1.DUMP00
+//E01     EXEC PGM=IEBGENER
+//SYSPRINT  DD SYSOUT=*
+//SYSIN     DD DUMMY
+//SYSUT1    DD DUMMY,DCB=(RECFM=U,LRECL=10,BLKSIZE=10)
+//SYSUT2    DD DISP=SHR,DSN=SYS1.DUMP01
+//E02     EXEC PGM=IEBGENER
+//SYSPRINT  DD SYSOUT=*
+//SYSIN     DD DUMMY
+//SYSUT1    DD DUMMY,DCB=(RECFM=U,LRECL=10,BLKSIZE=10)
+//SYSUT2    DD DISP=SHR,DSN=SYS1.DUMP02

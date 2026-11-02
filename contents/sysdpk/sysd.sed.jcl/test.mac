@@ -1,0 +1,22 @@
+//SEDTEST  JOB 01,'TEST SED',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//        EXEC PGM=SED,REGION=6144K,PARM='s/good/excellent/g'
+//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
+//SYSIN     DD *
+old is good
+old is bad
+old is awful
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=SED,REGION=6144K,PARM='-V'
+//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
+//SYSIN     DD *
+old is good
+old is bad
+old is awful
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*

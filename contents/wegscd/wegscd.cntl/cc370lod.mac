@@ -1,0 +1,17 @@
+//WEGSCDR  JOB (DOUG,5278),RECV,CLASS=A,MSGCLASS=X
+//*------------------------------------------------------------------*
+//RECV370 EXEC RECV370
+//XMITIN    DD DSN=WEGSCD.SEDP.OUT.XMIT,DISP=SHR
+//XMITOUT   DD DSN=&&XMITOUT,UNIT=SYSDA,
+//             SPACE=(TRK,(30,30,2),RLSE),
+//             DISP=(NEW,PASS)
+//*------------------------------------------------------------------*
+//IEBCOPY EXEC PGM=IEBCOPY
+//SYSPRINT  DD SYSOUT=*
+//FROM      DD DSN=&&XMITOUT,DISP=(OLD,PASS)
+//TO        DD DSN=WEGSCD.SED.LOADLIB,DISP=SHR
+//SYSUT3    DD UNIT=SYSDA,SPACE=(TRK,(5,5))
+//SYSUT4    DD UNIT=SYSDA,SPACE=(TRK,(5,5))
+//SYSIN     DD *
+  COPY INDD=FROM,OUTDD=TO
+//

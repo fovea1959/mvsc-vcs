@@ -1,0 +1,93 @@
+ TITLE '/home/wegscd/mvs-sed/sed-3.02/sed/sedsrc/memmove.c'
+         COPY  PDPTOP
+         CSECT
+* Program text area
+         DS    0F
+         EJECT
+* external function 'memmove' prologue
+* frame base=88, local stack=16, call args=0
+&FUNC    SETC  'memmove'
+MEMMOVE  PDPPRLG CINDEX=0,FRAME=104,BASER=12,ENTRY=YES
+         B     @@FEN0
+         LTORG
+@@FEN0   EQU   *
+         DROP  12
+         BALR  12,0
+         USING *,12
+@@PG0    EQU   *
+         LR    11,1
+         L     10,=A(@@PGT0)
+* Function 'memmove' code
+         MVC   88(4,13),0(11)
+         MVC   92(4,13),4(11)
+         L     2,88(13)
+         CL    2,92(13)
+         BNL   @@L2
+@@L3     EQU   *
+         LA    2,8(,11)
+         L     3,0(2)
+         LR    4,3
+         BCTR  3,0
+         ST    3,0(2)
+         LTR   4,4
+         BNE   @@L5
+         B     @@L6
+@@L5     EQU   *
+         L     4,88(13)
+         LA    6,92(,13)
+         L     2,0(6)
+         LR    5,4
+         LR    3,2
+         MVC   0(1,5),0(3)
+         A     2,=F'1'
+         ST    2,0(6)
+         A     4,=F'1'
+         ST    4,88(13)
+         B     @@L3
+@@L2     EQU   *
+         L     2,88(13)
+         CL    2,92(13)
+         BNE   @@L7
+         L     2,0(11)
+         ST    2,96(13)
+         B     @@L1
+@@L7     EQU   *
+         L     2,88(13)
+         A     2,8(11)
+         ST    2,88(13)
+         L     2,92(13)
+         A     2,8(11)
+         ST    2,92(13)
+@@L8     EQU   *
+         LA    2,8(,11)
+         L     3,0(2)
+         LR    4,3
+         BCTR  3,0
+         ST    3,0(2)
+         LTR   4,4
+         BNE   @@L10
+         B     @@L6
+@@L10    EQU   *
+         L     2,88(13)
+         BCTR  2,0
+         LR    3,2
+         ST    3,88(13)
+         L     2,92(13)
+         BCTR  2,0
+         ST    2,92(13)
+         MVC   0(1,3),0(2)
+         B     @@L8
+@@L6     EQU   *
+         L     2,0(11)
+         ST    2,96(13)
+@@L1     EQU   *
+         L     15,96(13)
+* Function 'memmove' epilogue
+         PDPEPIL
+* Function 'memmove' literal pool
+         DS    0D
+         LTORG
+* Function 'memmove' page table
+@@PGT0   DS    0F
+         DC    A(@@PG0)
+         END

@@ -1,0 +1,252 @@
+TSTVSCOM TITLE 'COMMAND PROCESSOR FOR TSTVS'
+*---------------------------------------------------------------------*
+*                                                                     *
+*        Module:        TSTVSCOM.                                     *
+*        Author:        Rob Prins, Skybird systems                    *
+*                                                                     *
+*        Function:      Process the following commands of TSTVS:      *
+*                       'A member' or 'AN member'                     *
+*                       Create member in the allocated PDS.           *
+*                       'U member' or 'UN member'                     *
+*                       Update member in the allocated PDS.           *
+*                       'D member' delete the member.                 *
+*                       'PDSLIST(,key)' LISTPDS of the PDS            *
+*                       starting with 'key'                           *
+*                       'EOJ' Terminate TSTVS and return to OS.       *
+*                       'ALLOC' Allocate the partitioned library      *
+*                       'RENAME' Rename an entire dataset             *
+*                                                                     *
+*                       In this module only the commands are scanned  *
+*                       end returned to the main module TSTVS.        *
+*                       Parameter in register 1, address of:          *
+*                       1 byte switches, 2 bytes routing code and     *
+*                       8 bytes member name, mapped by PARMAREA.      *
+*                                                                     *
+*        Modifications: Jul 26,1993 by Rpr: The "Key" in the          *
+*                       "PDSLIST,key" has now a variable length       *
+*                       Jul 29,1993 by Rpr: Add the RENAME command    *
+*                       to rename a dataset                           *
+*                       VS1 support deleted.                          *
+*                                                                     *
+*------------------------------------------ (C)-2022 Skybird systems -*
+         SPACE 2
+TSTVSCOM CSECT
+         SAVE  (14,12),,*              Save registers
+         LR    R10,R15                 Setup base register
+         USING TSTVSCOM,R10            Provide addressability
+         LR    R2,R1                   Pickup parameter
+         LA    R1,SAVEAREA             Our save area
+         ST    R1,8(,R13)              Forward pointer
+         ST    R13,4(,R1)              Backward pointer
+         LR    R13,R1
+         L     R11,0(,R2)              Parameter from TSTVS mainline
+         USING PARMAREA,R11            Address this DSECT
+         XR    R7,R7
+         ICM   R7,3,ROUTCDE            Obtain routing codes
+         STH   R7,CMDWAIT-4            Store in
+         STH   R7,MSG99E-2                      WTOR's
+ASKCMD   DS    0H
+         LA    R4,0
+         NI    SWITCH,X'FF'-UPDT-NBRS  Clear flags
+         XC    ECB,ECB                 Clear Event Control Block
+         MVC   REPLY(20),BLANKS        Clear reply area
+         MVC   PARM33,BLANKS           Clear member name in PARMAREA
+         WTOR  'EDT200A Enter command or ''HELP'' ',REPLY,20,ECB,      X
+               ROUTCDE=(2,3)           Ask for command
+CMDWAIT  WAIT  ECB=ECB                 Wait for reply
+         CLI   REPLY,C' '              Nothing replied?
+         BE    ASKCMD                  Yes: ask again
+         CLC   REPLY(5),=C'HELP '      HELP replied?
+         BNE   CMD002                  Continue if not
+         MVC   MSG99+4(60),HELP1       Provide HELP info
+         WTO   MF=(E,MSG99)            Inform operator/user
+         MVC   MSG99+4(60),HELP2       More HELP info
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP3
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP4
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP5
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP6
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP7
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP8
+         WTO   MF=(E,MSG99)
+         MVC   MSG99+4(60),HELP9       9th help msg             @930729
+         WTO   MF=(E,MSG99)                                     @930729
+         B     ASKCMD                  Prompt for new command
+CMD002   EQU   *                       Process the other commands
+         CLC   REPLY(6),=C'ALLOC '     Allocate libary?
+         BNE   CMD004                  No: test if other command given
+         LA    R4,16                   Rc=16 is ALLOC command
+         B     CMDEND                  Goto mainline TSTVS
+CMD004   DS    0H
+         CLC   REPLY(4),=C'EOJ '       End of Job given?
+         BNE   CMD006                  No: test if other command given
+         LA    R4,20                   Rc=20 is EOJ command
+         B     CMDEND
+CMD006   DS    0H                                               @930729
+         CLC   =C'RENAME',REPLY        Rename entire dataset?   @930729
+         BNE   CMD008                  No: Continue             @930729
+         LA    R4,24                   Rc=24 is RENAME command  @930729
+         B     CMDEND                  Return to mainline       @930729
+CMD008   DS    0H
+         TM    SWITCH,ALLOC            Is library allocated?
+         BO    CMD010                  Yes: good
+         MVC   MSG99+4(60),MSG02       Error msg EDT202E
+         WTO   MF=(E,MSG99)            Inform operator/user
+         B     ASKCMD
+CMD010   DS    0H
+         CLC   REPLY(7),=C'PDSLIST'    Command PDSLIST?
+         BNE   CMD012                  No: test if other command given
+         MVC   PARM33R(16),REPLY       Move reply               @930726
+         LA    R3,PARM33KY             start of key             @930726
+         LA    R1,PARM33KY+8           end of key               @930726
+         TRT   PARM33KY,TRTABTST       find first blank         @930726
+         SR    R1,R3                   compute length           @930726
+         STC   R1,PARM33KL             store keylength          @930726
+         LA    R4,12                   Rc=12 is PDSLIST command
+         B     CMDEND                  Return to mainline
+CMD012   DS    0H
+         CLC   REPLY(2),=C'D '         Delete member?
+         BNE   CMD014                  No: test if other command given
+         LA    R4,8                    Rc=8, Command, delete member
+         MVC   PARM33M(8),REPLY+2      Member name in PARMAREA
+         B     MEMBCHK                 Check validity member name
+CMD014   DS    0H
+         CLC   REPLY(2),=C'R '         Rename member?
+         BNE   CMD016                  No: test if other command given
+         MVC   PARM33M(8),BLANKS       Clear member name in PARMAREA
+         LA    R3,REPLY+2              Point to member name
+         LA    R4,PARM33M              Point to output
+         LA    R5,8                    Scan max 8 times
+CMD014A  DS    0H
+         CLI   0(R3),C','              Comma found?
+         BE    CMD014Z                 Yes: member name complete
+         MVC   0(1,R4),0(R3)           Move 1 byte member name
+         LA    R3,1(,R3)               Next position input
+         LA    R4,1(,R4)               Next position output
+         BCT   R5,CMD014A              Loop until all done
+CMD014Z  DS    0H
+         MVC   PARM33R(8),1(R3)
+         LA    R4,8                    Rc=8 = Rename Member command
+         OI    SWITCH,$RENAME          Indicate Rename
+         B     MEMBCHK                 Check validity member name
+CMD016   DS    0H
+         CLC   REPLY(2),=C'A '         Add member?
+         BNE   CMD020                  No: test if other command given
+         LA    R4,4                    Rc=4 is add member
+         MVC   PARM33M(8),REPLY+2      Move membername
+         B     MEMBCHK
+CMD020   DS    0H
+         CLC   REPLY(3),=C'AN '        Add member with seq. numbers?
+         BNE   CMD022                  Yes: carry on
+         LA    R4,4                    Rc=4 is add member
+         MVC   PARM33M(8),REPLY+3      Move membername
+         OI    SWITCH,NBRS             Indicate ask seq. numbers
+         B     MEMBCHK
+CMD022   DS    0H
+         CLC   REPLY(2),=C'U '         Update member without seq. nbrs
+         BNE   CMD024
+         XR    R4,R4                   Rc=0 is update member
+         MVC   PARM33M(8),REPLY+2      Move membername
+         OI    SWITCH,UPDT             We are in update mode
+         B     MEMBCHK
+CMD024   DS    0H
+         CLC   REPLY(3),=C'UN '        Update member with seq. numbers
+         BNE   CMD030                  No: error
+         XR    R4,R4                   Rc=0 is update member
+         MVC   PARM33M(8),REPLY+3      Membername into parm field
+         OI    SWITCH,NBRS             Indicate ask seq. numbers
+         OI    SWITCH,UPDT             We are in update mode
+         B     MEMBCHK
+CMD030   DS    0H
+         MVC   MSG99+4(60),MSG03       ERROR MSG EDT202E
+         WTO   MF=(E,MSG99)            Inform operator/user
+         B     ASKCMD
+MEMBCHK  DS    0H
+         CLI   PARM33M,C'#'            First character is national?
+         BE    MEMBOK                  Yes: OK
+         CLI   PARM33M,C'$'            National character?
+         BE    MEMBOK                  Yes: OK
+         CLI   PARM33M,C'@'            National character?
+         BE    MEMBOK                  Yes: OK
+         CLI   PARM33M,C'A'            Alphabetic?
+         BL    MEMBERR                 No invalid member name
+         CLI   PARM33M,C'Z'
+         BH    MEMBERR
+MEMBOK   DS    0H
+         B     CMDEND                  Go to mainline TSTVS
+MEMBERR  DS    0H                      Give error msg EDT203E
+         NI    SWITCH,255-$RENAME      Reset rename flag
+         MVC   MSG99+4(60),MSG04
+         WTO   MF=(E,MSG99)            Inform operator/user
+         B     ASKCMD                  Prompt for new command
+CMDEND   DS    0H
+         LR    R15,R4                  Return code for branchlist
+         L     R13,4(,R13)
+         RETURN (14,12),RC=(15)
+SAVEAREA DC    18F'0'
+REPLY    DS    CL20
+MSG02    DC    CL60'EDT202E No dataset allocated - reply ''ALLOC'''
+MSG03    DC    CL60'EDT203E Command invalid, Reenter'
+MSG04    DC    CL60'EDT204E Membername invalid, Reenter'
+HELP1    DC    CL60'EDT205I Commands:'
+HELP2    DC    CL60'        ALLOC:            Allocate the library'
+HELP3    DC    CL60'        EOJ:              Stop TSTVS'
+HELP4    DC    CL60'        PDSLIST,(key):    List directory of libraryx
+               '
+HELP5    DC    CL60'        A(N) member:      Add a new member'
+HELP6    DC    CL60'        U(N) member:      Update member (subcommand*
+               s)'
+HELP7    DC    CL60'        D member:         Delete the member'
+HELP8    DC    CL60'        R member,newname: Rename member'
+HELP9    DC    CL60'        RENAME:           Rename an entire dataset'
+ECB      DS    F
+BLANKS   DC    CL22' '
+MSG99    WTO   '1234512345123451234512345123451234512345123451234512345X
+               12345',ROUTCDE=(2,3),MF=L
+MSG99E   EQU   *
+TRTABTST DC    256X'00'                                         @930726
+         ORG   TRTABTST                                         @930726
+         DC    X'FF'                   binary zero              @930726
+         ORG   TRTABTST+X'40'                                   @930726
+         DC    X'FF'                   blank                    @930726
+         ORG   ,                       reset location counter   @930726
+*        GENERAL EQUATES.
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+*
+         EJECT
+PARMAREA DSECT                         Parameter from mainline
+SWITCH   DS   C                        Allocation swith
+ALLOC    EQU   X'80'                   Set in TSTVSALL routine
+NBRS     EQU   X'20'                   Indicate numbered data
+UPDT     EQU   X'10'                   Reply='U' or 'UN' member name
+$UNALL   EQU   X'08'
+$RENAME  EQU   X'04'                   If on: rename command
+$RENDS   EQU   X'02'                   If on: rename dataset    @930729
+ROUTCDE  DS    CL2                     Routing code all messages
+*
+PARM33   DS    0CL25                   Parmarea from mainline   @930726
+PARM33M  DS    CL8                     Member name
+PARM33R  DS    CL8                     Newname if Rename command
+PARM33KY DS    CL8                     Key for PDSLIST          @930726
+PARM33KL DS    CL1                     Actual keylength         @930726
+         END

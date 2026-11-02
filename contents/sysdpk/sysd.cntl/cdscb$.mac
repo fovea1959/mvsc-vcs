@@ -1,0 +1,119 @@
+//CDSCB$   JOB 01,'ROB PRINS',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K,COND=(0,NE)
+//*-----------------------------------------------------------*
+//*                                                           *
+//* Name:    TK5.CNTL(CDSCB$)                                 *
+//* Desc:    Install the 'CDSCB' TSO command and HELP member. *
+//* Last Update: 2024/11/06 19:08                             *
+//*                                                           *
+//*-----------------------------------------------------------*
+//ASMLKD EXEC ASMFCL,MAC1='SYS1.AMODGEN',
+//             PARM.ASM='OBJECT,NODECK,XREF(SHORT)',
+//             PARM.LKED='LIST,XREF,RENT,NCAL,AC=1'
+//ASM.SYSIN DD DSN=MVSCUS.ASM(CDSCB),DISP=SHR
+//LKED.SYSLMOD DD DSN=SYS2.CMDLIB(CDSCB),DISP=SHR
+//*
+//* ------------------------------------------------------------------*
+//*                                                                   *
+//* ZAP TK5 version of the CDSCB TSO command to allow batch execution *
+//*                                                                   *
+//* Note: This is to be applied only if the system enforces RAC user  *
+//* ----- validation for batch jobs and if SVC 244 is RAC protected.  *
+//*       Otherwise applying this ZAP allows users to compromise      *
+//*       system integrity through invalid use of CDSCB.              *
+//*                                                                   *
+//* The following table shows the authorization needed to use CDSCB   *
+//* with the original TK3 and with the ZAPed version:                 *
+//*                                                                   *
+//*                            +-------------+-------------+          *
+//*                            × TSO Session ×    Batch    ×          *
+//*                            +-----+-------+-----+-------+          *
+//*                            × TK5 × ZAPed × TK5 × ZAPed ×          *
+//*    +-----------------------+-----+-------+-----+-------+          *
+//*    × OPER authorization    ×  X  ×   -   × n/a ×   -   ×          *
+//*    +-----------------------+-----+-------+-----+-------+          *
+//*    × SVC 244 authorization ×  X  ×   X   × n/a ×   X   ×          *
+//*    +-----------------------+-----+-------+-----+-------+          *
+//*                                                                   *
+//* ------------------------------------------------------------------*
+//ZAPZARAP EXEC PGM=AMASPZAP
+//SYSPRINT DD  SYSOUT=*
+//SYSLIB   DD  DISP=SHR,DSN=SYS2.CMDLIB
+//SYSIN    DD  *
+NAME CDSCB
+IDRDATA BATCHOK
+***
+*** First part
+*** ==========
+***
+*** Remove check for interactive TSO session
+*** with OPER authorization.
+***
+VER 009A 4770A0CA      BNZ IMPLEXEC    * exit (command not found)
+REP 009A 4770A11E      BNZ PROCEED     * continue
+/*
+//HELP    EXEC PGM=IEBUPDTE,PARM=NEW
+//SYSPRINT DD  SYSOUT=*
+//SYSUT2   DD  DSN=SYS2.HELP,DISP=SHR
+//SYSIN    DD  *
+./ ADD NAME=CDSCB
+)F FUNCTION -
+  THE CDSCB (CHANGE DSCB) COMMAND MODIFIES A DATA SET'S
+  FORMAT-1 DSCB IN A VTOC.
+
+  SINCE THE FORMAT-1 DSCB CONTAINS INFORMATION CRUCIAL TO
+  A DATA SETS' SECURITY AND INTEGRITY, (AND IN FACT TO THE
+  WHOLE SYSTEM'S SECURITY AND INTEGRITY), THIS COMMAND
+  MUST BE RESTRICTED TO SYSTEMS SUPPORT PERSONNEL.
+
+)X SYNTAX  -
+       CDSCB  'DSNAME'   EXPDT(DATE)  SHR  VOL(VOLUME) UNIT(UNIT)
+                         CREATE(DATE) REFDT(DATE)
+                         DSORG(XX) RECFM(XX) LRECL(XX) BLKSIZE(XX)
+                         ALLOC(TR/CYL/BL)  SPACE(SECONDARY-AMOUNT)
+                         PWR/PWW/NOP/RACF/NORACF
+                         ZAP(OFFSET VERDATA REPDATA)
+  REQUIRED - 'DSNAME'
+  DEFAULTS - NOTHING WILL HAPPEN IF NO CHANGES ARE SPECIFIED.
+  ALIAS    - NONE
+)O OPERANDS -
+  'DSNAME'  -  THE NAME OF THE DATA SET WHOSE FORMAT-1 DSCB
+             IS TO BE MODIFIED.
+))UNIT(UNIT) - FOR UNCATALOGED DATA SETS, THE UNIT TYPE OF THE
+             VOLUME WHERE THE DATA SET RESIDES.
+))VOL(VOLUME) - FOR UNCATALOGED DATA SETS, THE VOLUME SERIAL
+             OF THE DATA SET.
+))SHR      - THIS KEYWORD INDICATES THAT THE DSCB IS TO BE
+             MODIFIED EVEN IF ANOTHER JOB OR TSO SESSION
+             IS USING THE DATA SET.
+))EXPDT(DATE) - THE EXPIRATION DATE IS TO BE SET TO THE SPECIFIED
+             DATE.  THE VALID FORMATS FOR 'DATE' ARE:
+             '0', YYDDD, YY.DDD, YY/MM/DD, YYYY.DDD AND YYYY/DDD.
+))CREATE(DATE) - THE CREATION DATE IS TO BE SET TO THE SPECIFIED
+             DATE.  THE VALID FORMATS FOR 'DATE' ARE:
+             YYDDD, YY.DDD, YY/MM/DD, YYYY.DDD AND YYYY/DDD.
+             AN ASTERISK '*' MAY BE USED TO SPECIFY THE CURRENT DATE.
+))REFDT(DATE) - THE REFERENCE DATE IS TO BE SET TO THE SPECIFIED
+             DATE.  THE VALID FORMATS FOR 'DATE' ARE:
+             '0', YYDDD, YY.DDD, YY/MM/DD, YYYY.DDD AND YYYY/DDD.
+             AN ASTERISK '*' MAY BE USED TO SPECIFY THE CURRENT DATE.
+))DSORG(DSORG) - THE DSORG IS TO BE CHANGED TO THE SPECIFIED TYPE.
+))RECFM(RECFM) - THE RECFM IS TO BE CHANGED TO THE SPECIFIED TYPE.
+))LRECL(LRECL) - THE LRECL IS TO BE CHANGED TO THE SPECIFIED VALUE.
+))BLKSIZE(VALUE) - THE BLKSIZE IS TO BE CHANGED TO THE SPECIFIED VALUE.
+))PWR      - THE PROTECTION FLAGS ARE TO BE SET FOR PWREAD, MEANING
+             A PASSWORD IS REQUIRED TO READ OR WRITE.
+))PWW      - THE PROTECTION FLAGS ARE TO BE SET FOR PWWRITE, MEANING
+             A PASSWORD IS REQUIRED TO WRITE BUT NOT TO READ.
+))NOP      - THE PROTECTION FLAGS ARE TO BE SET OFF, MEANING
+             A PASSWORD IS NEVER REQUIRED.
+))RACF     - THE DATA SET IS TO BE MARKED RACF PROTECTED.
+))NORACF   - THE DATA SET IS TO BE MARKED NOT RACF PROTECTED.
+))ZAP(OFFSET VERDATA REPDATA) - THIS KEYWORD MAY BE USED TO MODIFY
+             FIELDS WITHIN THE DSCB BY SPECIFYING (IN HEX) THE
+             FIELD OFFSET, THE FIELD'S CURRENT VALUE (IN HEX), AND
+             THE REPLACEMENT VALUE (IN HEX).  IF THE CURRENT VALUE
+             DOES NOT VERIFY CORRECTLY, THE DATA IS NOT REPLACED.
+             THE REPDATA MAY BE OMITTED IF YOU JUST WANT TO VERIFY.
+./ ENDUP
+/*

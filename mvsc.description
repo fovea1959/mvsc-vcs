@@ -20,3 +20,10 @@ wegscd:wegscd.proclib
 wegscd:wegscd.smfarc
 wegscd:wegscd.workload
 wegscd:wegscd.wsmf.src
+sysdpk:sysd.asm
+sysdpk:sysd.cntl
+sysdpk:sysd.parmlib
+sysdpk:sysd.sys2.proclib
+sysdpk:sysd.sed.asm
+sysdpk:sysd.sed.asmgood
+sysdpk:sysd.sed.jcl
