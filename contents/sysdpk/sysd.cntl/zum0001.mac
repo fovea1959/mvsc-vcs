@@ -6,7 +6,7 @@
 //             USER=&SYSUID
 //*********************************************************************
 //*
-//* Name: MVSCUS.CNTL(ZUM0001)
+//* Name: SYSD.CNTL(ZUM0001)
 //*
 //* Desc: Install usermod ZUM0001 to authorize various TSO commands
 //*

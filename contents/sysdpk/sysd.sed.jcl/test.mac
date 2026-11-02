@@ -2,7 +2,7 @@
 //             NOTIFY=&SYSUID,REGION=2048K
 //*------------------------------------------------------------------*
 //        EXEC PGM=SED,REGION=6144K,PARM='s/good/excellent/g'
-//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
 //SYSIN     DD *
 old is good
 old is bad
@@ -12,7 +12,7 @@ old is awful
 //SYSTERM   DD SYSOUT=*
 //*------------------------------------------------------------------*
 //        EXEC PGM=SED,REGION=6144K,PARM='-V'
-//STEPLIB   DD DISP=SHR,DSN=MVSCUS.LINKLIB
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
 //SYSIN     DD *
 old is good
 old is bad
