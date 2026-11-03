@@ -1,0 +1,38 @@
+parse arg dsn
+call readall(dsn,jcl.,'dsn')
+
+do i = 1 to jcl.0
+  if i = 1 then do
+    parse var jcl.i jobname .
+    r1 = pick_random_char('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    j1 = changestr('@', jobname, r1)
+
+    r1 = pick_random_char('0123456789')
+    j1 = changestr('#', j1, r1)
+
+    jcl.i = overlay(j1, jcl.i)
+
+    jcl.i = fix_msgclass(jcl.i)
+  end
+  say i jcl.i
+end
+
+call submit('jcl.')
+exit 0
+
+fix_msgclass: procedure
+  parse arg pp
+  idx = index(pp, 'MSGCLASS=')
+  if idx <> 0 then do
+    pp = overlay('W', pp, idx+9)
+  end
+  return pp
+
+pick_random_char: procedure
+  parse arg inputstr
+
+  l = LENGTH(inputstr)
+  idx = random(1, l)
+  rc = SUBSTR(inputstr, idx, 1)
+  return rc
+
