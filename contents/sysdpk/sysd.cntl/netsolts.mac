@@ -1,0 +1,236 @@
+//WEGSCDXX   JOB (SYS),NSTEST,CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=WEGSCD,REGION=2048K,COND=(0,NE)
+//ASM     EXEC PGM=IFOX00,PARM='NODECK,LOAD,TERM'
+//SYSLIB   DD  DSN=SYS2.MACLIB,DISP=SHR
+//         DD  DSN=SYSD.CNTL,DISP=SHR
+//   DD  DSN=SYS1.MACLIB,DISP=SHR
+//SYSGO    DD  DSN=&&LOADSET,DISP=(MOD,PASS),SPACE=(CYL,(1,1)),
+//             UNIT=VIO,DCB=(DSORG=PS,RECFM=FB,LRECL=80,BLKSIZE=800)
+//SYSTERM  DD  SYSOUT=*
+//SYSPRINT DD  SYSOUT=*
+//SYSPUNCH DD  DUMMY
+//SYSUT1   DD  UNIT=VIO,SPACE=(CYL,(6,1))
+//SYSUT2   DD  UNIT=VIO,SPACE=(CYL,(6,1))
+//SYSUT3   DD  UNIT=VIO,SPACE=(CYL,(6,1))
+//SYSIN    DD  *
+*---------------------------------------------------------------------*
+*  SCR3270 - TSO COMMAND: SEND A 3270 FORM, READ AND DECODE REPLY     *
+*                                                                     *
+*  1. WRITES A FORM (ERASE/WRITE) WITH TPUT FULLSCR                   *
+*  2. WAITS FOR THE OPERATOR WITH TGET ASIS (AID + CURSOR + DATA)     *
+*  3. ERASES THE SCREEN AND PRINTS AID, CURSOR, LENGTH, THEN ONE      *
+*     LINE PER MODIFIED FIELD (CODED ADDRESS IN HEX + TEXT)           *
+*                                                                     *
+*  ASSEMBLE: IFOX00 (SYS1.MACLIB, SYS1.AMODGEN)                       *
+*  LINK:     NCAL,LET,LIST,XREF  - NO SPECIAL ATTRIBUTES NEEDED       *
+*  RUN:      PUT IN A LINKLIST/STEPLIB LIBRARY, THEN TYPE  SCR3270    *
+*            OR  CALL 'YOUR.LOADLIB(SCR3270)'                         *
+*  RC:       0 OK, 8 TPUT FAILED, 12 TGET FAILED                      *
+*---------------------------------------------------------------------*
+SCR3270  CSECT
+         SAVE  (14,12),,SCR3270
+         LR    R12,R15
+         USING SCR3270,R12
+         LA    R2,SAVEAREA
+         ST    R13,4(,R2)
+         ST    R2,8(,R13)
+         LR    R13,R2
+         SR    R11,R11                 RETURN CODE = 0
+*
+*        CLEAR THE SCREEN FIRST (ERASE/WRITE, NO DATA)
+*
+         TPUT  CLRSTRM,CLRLEN,FULLSCR
+         LTR   R15,R15
+         BNZ   PUTFAIL
+*
+*        SEND THE DATA STREAM
+*
+         TPUT  OUTSTRM,OUTLEN,FULLSCR
+         LTR   R15,R15
+         BNZ   PUTFAIL
+*
+*        WAIT FOR ENTER / PF KEY / CLEAR / PA KEY
+*        ON RETURN R1 = BYTES RECEIVED, INBUF = AID,CURSOR(2),DATA
+*        (INBUF IS ZEROED FIRST SO SHORT REPLIES SHOW 00 FOR THE
+*        MISSING BYTES - CLEAR AND PA KEYS SEND THE AID ONLY)
+*
+         XC    INBUF(256),INBUF
+         TGET  INBUF,INBUFL,ASIS
+         LR    R10,R15                 KEEP TGET RETURN CODE
+         ST    R1,RCVLEN
+*
+*        LEAVE FULL-SCREEN MODE CLEANLY
+*
+         TPUT  CLRSTRM,CLRLEN,FULLSCR
+         LTR   R10,R10
+         BNZ   GETFAIL
+*
+*        HEADER LINE: AID, CURSOR ADDRESS, LENGTH
+*
+         LA    R4,INBUF
+         LA    R6,HDRAID
+         BAL   R14,HEXB
+         LA    R4,INBUF+1
+         LA    R6,HDRCUR
+         BAL   R14,HEXB
+         LA    R4,INBUF+2
+         LA    R6,HDRCUR+2
+         BAL   R14,HEXB
+         L     R3,RCVLEN
+         CVD   R3,DWORK
+         UNPK  LENOUT(5),DWORK+5(3)
+         OI    LENOUT+4,X'F0'
+         LA    R2,HDRLINE
+         LA    R3,HDRLINEL
+         TPUT  (R2),(R3),EDIT
+*
+*        ONE LINE PER FIELD: X'11' ADDR(2) DATA...
+*
+         LA    R4,INBUF+3
+         LA    R5,INBUF
+         A     R5,RCVLEN               R5 = END OF REPLY
+FLDLP    CR    R4,R5
+         BNL   EXIT
+         CLI   0(R4),X'11'
+         BNE   EXIT
+         LA    R4,1(,R4)
+         LA    R6,FLDA
+         BAL   R14,HEXB
+         LA    R4,1(,R4)
+         LA    R6,FLDA+2
+         BAL   R14,HEXB
+         LA    R4,1(,R4)
+         LR    R7,R4                   R7 = START OF DATA
+SCAN     CR    R4,R5
+         BNL   SCANEND
+         CLI   0(R4),X'11'
+         BE    SCANEND
+         LA    R4,1(,R4)
+         B     SCAN
+SCANEND  LR    R8,R4
+         SR    R8,R7                   R8 = DATA LENGTH
+         MVI   FLDDATA,C' '
+         MVC   FLDDATA+1(59),FLDDATA
+         LTR   R8,R8
+         BZ    SHOWFLD
+         C     R8,MAXDATA
+         BNH   LENOK
+         L     R8,MAXDATA
+LENOK    BCTR  R8,0
+         EX    R8,MOVEDATA
+SHOWFLD  LA    R2,FLDLINE
+         LA    R3,FLDLINEL
+         TPUT  (R2),(R3),EDIT
+         B     FLDLP
+MOVEDATA MVC   FLDDATA(0),0(R7)
+*
+PUTFAIL  LA    R11,8
+         LA    R2,MSG1
+         LA    R3,MSG1L
+         TPUT  (R2),(R3),EDIT
+         B     EXIT
+GETFAIL  LA    R11,12
+         LA    R2,MSG2
+         LA    R3,MSG2L
+         TPUT  (R2),(R3),EDIT
+*
+EXIT     LR    R15,R11                 RETURN CODE
+         L     R13,4(,R13)
+         RETURN (14,12),RC=(15)
+*
+*        HEXB - CONVERT THE BYTE AT 0(R4) TO 2 HEX CHARS AT 0(R6)
+*        RETURN WITH BR R14, NO REGISTERS CHANGED
+*
+HEXB     MVC   W1(1),0(R4)
+         UNPK  W2(3),W1(2)
+         TR    W2(2),HEXTAB-240
+         MVC   0(2,R6),W2
+         BR    R14
+*
+*---------------------------------------------------------------------*
+*  DATA                                                               *
+*---------------------------------------------------------------------*
+SAVEAREA DS    18F
+DWORK    DS    D
+RCVLEN   DS    F
+MAXDATA  DC    F'60'
+W1       DS    CL2
+W2       DS    CL3
+HEXTAB   DC    C'0123456789ABCDEF'
+*
+MSG1     DC    C'SCR3270: TPUT FULLSCR FAILED - NOT A 3270 TERMINAL?'
+MSG1L    EQU   *-MSG1
+MSG2     DC    C'SCR3270: TGET FAILED'
+MSG2L    EQU   *-MSG2
+*
+HDRLINE  DC    C'AID='
+HDRAID   DS    CL2
+         DC    C' CURSOR='
+HDRCUR   DS    CL4
+         DC    C' LEN='
+LENOUT   DS    CL5
+HDRLINEL EQU   *-HDRLINE
+*
+FLDLINE  DC    C'FIELD AT '
+FLDA     DS    CL4
+         DC    C' = '
+FLDDATA  DS    CL60
+FLDLINEL EQU   *-FLDLINE
+*
+INBUFL   EQU   256
+INBUF    DS    CL256
+*
+*        3270 OUTBOUND STREAM (BUFFER ADDRESSES ARE 12-BIT CODED)
+*
+*          27       ESC - NEEDED FOR NON-SNA 3270 (LOCAL OR BSC);
+*                   REMOVE IT IF YOUR TERMINAL IS AN SNA LU2
+*          7E       ERASE/WRITE ALTERNATE (USES THE ALTERNATE SCREEN
+*                   SIZE, E.G. 43X80; F5 WOULD RESET TO 24X80 AND
+*                   TSO'S LATER WRITES WOULD HIT 'MAXIMUM 1919')
+*          C3       WCC: RESTORE KEYBOARD + RESET MDT
+*          11 hh ll SBA  (ADDRESS = (ROW-1)*80 + (COL-1))
+*          1D aa    SF   START FIELD, ATTRIBUTE aa
+*          13       IC   INSERT CURSOR
+*
+*        ATTRIBUTE BYTES USED:
+*          E8  PROTECTED, INTENSIFIED       (TITLE)
+*          60  PROTECTED, NORMAL            (LABELS, FIELD ENDERS)
+*          40  UNPROTECTED, ALPHANUMERIC    (TEXT INPUT)
+*          50  UNPROTECTED, NUMERIC ONLY    (ZIP)
+*          4C  UNPROTECTED, NON-DISPLAY     (PASSWORD)
+*
+*        EACH INPUT FIELD IS: LABEL AT COL 1, ATTRIBUTE AT COL 15,
+*        DATA FROM COL 16, AND A PROTECTED SF TO END THE FIELD.
+*
+OUTSTRM  DS    0X
+         DC    X'277E'               ESC, ERASE/WRITE ALT
+         COPY  NSLOGOTS
+OUTLEN   EQU   *-OUTSTRM
+*
+CLRSTRM  DC    X'277EC3'               ESC, ERASE/WRITE ALT, WCC
+CLRLEN   EQU   *-CLRSTRM
+*
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+         END
+/*
+//LKED    EXEC PGM=IEWL,PARM='MAP,LIST'
+//SYSLIN   DD  DSN=&&LOADSET,DISP=(OLD,DELETE)
+//SYSLMOD  DD  DSN=SYS2.CMDLIB(NETSOLTS),DISP=SHR
+//SYSPRINT DD  SYSOUT=*
+//SYSUT1   DD  UNIT=VIO,SPACE=(CYL,(5,2))
+//

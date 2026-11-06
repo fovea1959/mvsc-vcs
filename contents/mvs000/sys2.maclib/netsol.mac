@@ -2332,38 +2332,26 @@ SOLCDATA EQU   *                                               @XM02032
 ERASWRIT EQU   *                                               @ZA13651
          OI    MACFLAG2,WRITLBT        TELL ERREXIT OF WRITE   @ZA13651
          OI    MFLAGS,WRITING          TELL ERREXIT OF WRITE   @ZA13651
-         CLI   MSGINDEX,X'0C'
-         BNE   EGSKIP
          CLI   MSGINDEX,X'0C'             , is this msg to be shown?
-         MVC   EGDATA(8),NAMEDEV
-         MVC   EGDATA+9(8),APPLID
-         LA    R3,EGMSGLN
          BNE   NOUSS                      , bif not
-*
-         WRITE RPL=(PTRRPL),                                           X
 *                                         , update logo screen
          LA    R15,DATETIME               , call DATETIME ..
-         LA    R3,TK5MDATE                , .. to fill date and ..
-         LA    R4,TK5MTIME                , .. time fields ..
+         LA    R3,LOGODATE                , .. to fill date and ..
+         LA    R4,LOGOTIME                , .. time fields ..
          BALR  R14,R15                    , .. on the logo screen
          MVC   SYNARG(FOUR),CID           , get CID into SYNCHRPL
-               EXIT=WRITEND
-*
          OI    MFLAGS2,INQUIRE            , indicate INQUIRE
-         B     EGOK
-*
          OI    MACFLAGS,INQCIDX           , indicate INQ CIDXLATE
-EGSKIP   DS    0H                                 EGSKIP
          NI    SRPLEXT1,FF-RPLNIB         , synch RPL has CID in
 *                                         ,  ARG field
        INQUIRE RPL=SYNCHRPL,              , get terminal name          *
                OPTCD=CIDXLATE,            ,  from CID and put          *
-               AREA=TK5MDEV,              ,  it on the logo screen     *
+               AREA=LOGODEV,              ,  it on the logo screen     *
                AREALEN=D8
          NI    MFLAGS2,FF-INQUIRE         , INQUIRE is done
 *                                         , Now write the screen
-         LA    R3,TK5MLOGL                , load length of screen data
-         L     R4,=A(TK5MLOG)             , load address of screen data
+         LA    R3,LOGOLOGL                , load length of screen data
+         L     R4,=A(LOGOLOG)             , load address of screen data
          WRITE RPL=(PTRRPL),              , send data                  X
                OPTCD=(LBT,ERASE),         , erase screen first         X
                AREA=(R4),                 , address is in R4           X
@@ -6873,55 +6861,7 @@ RPL&TABCONT DC    (ENDSECT-STSECT)X'00' ONE RPL WORK AREA      @VS49571
 .MSGS    ANOP
 .*
 .*
-         COPY  MVSCLOGO                   , logon screen copy book
-         DC    X'C3'
-*
- DC X'11',X'C5C3',X'1D',X'E8',X'2842F5'
- DC C'XM     MM VV     VV  SSSSSS           //    TTTTTTTT  SSSSSS   '
- DC C'OOOOOOO '
-*
- DC X'11',X'C6D3',X'1D',X'E8'
- DC C'MMM   MMM VV     VV SS    SS         //        TT    SS    SS O'
- DC C'O     OO'
-*
- DC X'11',X'C7E3',X'1D',X'E8'
- DC C'MMMM MMMM VV     VV SS              //         TT    SS       O'
- DC C'O     OO'
-*
- DC X'11',X'C8F3',X'1D',X'E8'
- DC C'MM MMM MM VV     VV  SSSSSS        //          TT     SSSSSS  O'
- DC C'O     OO'
-*
- DC X'11',X'4AC3',X'1D',X'E8'
- DC C'MM  M  MM  VV   VV     SSSS       //           TT       SSSS  O'
- DC C'O     OO'
-*
- DC X'11',X'4BD3',X'1D',X'E8'
- DC C'MM     MM  VV   VV        SS     //            TT          SS O'
- DC C'O     OO'
-*
- DC X'11',X'4CE3',X'1D',X'E8'
- DC C'MM     MM   VV VV   SS    SS    //             TT    SS    SS O'
- DC C'O     OO'
-*
- DC X'11',X'4DF3',X'1D',X'E8'
- DC C'MM     MM    VVV     SSSSSS    //              TT     SSSSSS   '
- DC C'OOOOOOO '
-*
- DC X'11',X'D27B',X'1DF0',X'284100',X'2842F4'
- DC C'Welcome to MVS3.8j, running under the Hercules emulator'
- DC X'1DF0',X'284200'
-*
-*
-*
-*
-*
- DC X'11',X'5B60',X'1D',X'E8'
- DC C'TSO Logon ===>'
- DC X'1D',X'C1'
- DC X'13'
-EGDATA DC CL8' ',C' ',CL8' '
-EGMSGLN  EQU   *-EGMSG
+         COPY NSLOGO                      , logon screen copy book
          TITLE 'MSGCSECT - MESSAGE CONTROL SECTION'
          SPACE 2
 MSGCSECT CSECT
