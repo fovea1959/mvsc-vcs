@@ -1,0 +1,51 @@
+* NEEDS WORK: TIOT IS NOT DEFINED
+         PRINT GEN
+*  MAP THE CONTROL BLOCKS WE WALK
+         IHAPSA                    PSA   (FLCCVT)
+         EJECT
+         CVT   DSECT=YES           CVT   (CVTTCBP)
+         EJECT
+         IKJTCB                    TCB   (TCBTIO)
+         EJECT
+         IEFTIOT1                  TIOT  (TIOCNJOB)
+         EJECT
+*
+R0       EQU   0
+R1       EQU   1
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R12      EQU   12
+R13      EQU   13
+R15      EQU   15
+*
+CURRTCB  EQU   4                OFFSET OF CURRENT TCB IN CVTTCBP AREA
+*
+JOBNAM   CSECT
+         SAVE  (14,12),,JOBNAM
+         LR    R12,R15             BASE REGISTER
+         USING JOBNAM,R12
+         ST    R13,SAVEA+4         CHAIN SAVE AREAS
+         LA    R15,SAVEA
+         ST    R15,8(,R13)
+         LR    R13,R15
+*
+         USING PSA,R0
+         USING CVT,R4
+         USING TCB,R5
+         USING TIOT1,R6
+*
+         L     R3,0(,R1)           CALLER'S 8-BYTE RESULT FIELD
+         L     R4,FLCCVT           PSA -> CVT
+         L     R5,CVTTCBP          CVT -> TCB POINTER WORDS
+         L     R5,CURRTCB(,R5)     CURRENT TCB
+         L     R6,TCBTIO           TCB -> TIOT
+         MVC   0(8,R3),TIOCNJOB    JOB NAME FROM TIOT
+*
+         L     R13,SAVEA+4
+         RETURN (14,12),RC=0
+*
+SAVEA    DC    18F'0'
+         LTORG
+         END

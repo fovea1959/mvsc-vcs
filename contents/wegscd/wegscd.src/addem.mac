@@ -1,0 +1,14 @@
+ADDEM    CSECT
+         STM   14,12,12(13)       SAVE CALLER'S REGISTERS
+         BALR  12,0               LOAD BASE REGISTER
+         USING *,12
+         L     2,0(,1)            ADDRESS OF A
+         L     3,4(,1)            ADDRESS OF B
+         L     4,8(,1)            ADDRESS OF C
+         LE    0,0(,2)            FPR0 = A
+         AE    0,0(,3)            FPR0 = A + B
+         STE   0,0(,4)            C = FPR0
+         LM    14,12,12(13)       RESTORE REGISTERS
+         SR    15,15              RETURN CODE 0
+         BR    14                 RETURN
+         END

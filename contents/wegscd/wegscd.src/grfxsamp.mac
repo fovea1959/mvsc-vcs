@@ -1,0 +1,1064 @@
+GRFXSAMP TITLE 'SAMPLE 3270 PROGRAMMED SYMBOL GRAPHICS APPLICATION'
+***********************************************************************
+*
+*        Sample application to demonstrate 3270 Graphics
+*
+*
+*        Written by Greg Price of Prycroft Six Pty Ltd, January 2008.
+*
+*
+*        Generally available from:
+*             www.prycroft6.com.au
+*
+*        Architecture coding level:
+*             System/370
+*
+*        Operating System platform:
+*             MVS
+*
+*        This program uses macros from:
+*             SYS1.MACLIB
+*
+*
+*        Execution enviroment:
+*
+*             TSO session under TSO/VTAM
+*                         -or-
+*             with file IEFRDER allocated to a 3270 terminal.
+*
+*             To run as a started task place JCL like
+*             //IEFPROC EXEC PGM=GRFXSAMP,TIME=1440,REGION=4096K
+*             (with STEPLIB if necessary)
+*             into SYS2.PROCLIB(GRFX) or similar and issue
+*             S GRFX,011
+*             to run on 3270 terminal unit 011 for example.
+*             P 011
+*             can be issued to stop such a started task.
+*
+*             To run as a batch job use JCL like
+*             //GRFX     JOB CLASS=A,TIME=1440,REGION=4096K
+*             //STEP1   EXEC PGM=GRFXSAMP
+*             //STEPLIB  DD  DSN=...,DISP=SHR
+*             //IEFRDER  DD  UNIT=011
+*             to run on 3270 terminal unit 011 for example.
+*
+***********************************************************************
+         EJECT
+***********************************************************************
+*
+*        When used with a 3270 terminal with a supported graphics
+*        capability this application will present a display using
+*        3270 graphics.
+*
+*        The position of the display on the screen can be moved
+*        using PF7/19 (up), PF8/20 (down), PF10/22 (left) and
+*        PF11/23 (right).
+*
+*        The application can be terminated by PF3/15,
+*        or by a STOP or P MVS system command.
+*
+*
+*        Change Log
+*
+*        2008-02-23 - Remove useless code after TPG macro.
+*                   - Minor changes to comments.                  GP@P6
+*        2016-01-04 - Fix offset that CHARSIZE is loaded from at
+*                     label GOTGEBIT - thanks to Juergen Winkelmann.
+*
+***********************************************************************
+         EJECT
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+         SPACE
+ESC      EQU   X'27'             Escape
+WRT      EQU   X'F1'             Write
+WSF      EQU   X'F3'             Write Structured Field
+EW       EQU   X'F5'             Erase/Write
+EWA      EQU   X'7E'             Erase/Write Alternate
+WCCNULL  EQU   X'40'             No action Write Control Character
+WCCSTND  EQU   X'C1'             Standard Write Control Character
+WCCUNLK  EQU   X'C3'             Unlock KB Write Control Character
+WCCBELL  EQU   X'C5'             Sound BELL Write Control Character
+GE       EQU   X'08'             Graphic Escape
+SBA      EQU   X'11'             Set Buffer Address
+IC       EQU   X'13'             Insert Cursor
+SF       EQU   X'1D'             Start Field
+SA       EQU   X'28'             Set Attribute
+SFE      EQU   X'29'             Start Field Extended
+RA       EQU   X'3C'             Repeat to Address
+HILT     EQU   X'41'             Highlighting attribute
+COLR     EQU   X'42'             Colour attribute
+SYMS     EQU   X'43'             Symbol set attribute
+PROHI    EQU   X'E8'             Protected high intensity
+PROHIS   EQU   X'F8'             Protected high intensity autoskip
+PROLOS   EQU   X'F0'             Protected low intensity autoskip
+UNPHI    EQU   X'C8'             Unprotected high intensity (input)
+UNPHIM   EQU   X'C9'             Unprotected high modified  (input)
+NULL     EQU   X'00'             Normal / default / all attributes
+BLUE     EQU   X'F1'             Blue
+RED      EQU   X'F2'             Red
+PINK     EQU   X'F3'             Pink
+GREEN    EQU   X'F4'             Green
+TURQOISE EQU   X'F5'             Turquoise
+YELLOW   EQU   X'F6'             Yellow
+WHITE    EQU   X'F7'             White, neutral
+RVRSE    EQU   X'F2'             Reverse video
+USCR     EQU   X'F4'             Underscore
+QUOTE    EQU   X'7D'             Single Quote
+         EJECT
+*
+*         Perform initial housekeeping
+*
+GRFXSAMP CSECT
+         USING GRFXSAMP,R15
+         B     $START
+         DROP  R15               (GRFXSAMP)
+         DC    AL1(39),CL39'GRFXSAMP - SAMPLE 3270 GRAPHICS PROGRAM'
+         SPACE
+$START   STM   R14,R12,12(R13)   Save the caller's registers.
+         LR    R12,R15           Establish
+         LA    R10,1             addressability.
+         LA    R11,4095(R10,R12)
+         LA    R10,4095(R10,R11)
+         USING GRFXSAMP,R12,R11,R10
+         LA    R2,SAVE           Chain save areas.
+         ST    R13,4(,R2)
+         ST    R2,8(,R13)
+         LR    R13,R2
+*
+*         Determine if TSO session
+*
+         EXTRACT MF=(E,EXTRTSO)  Get address of TSO flag.
+         L     R1,TSOFIELD       Point to the TSO flag.
+         TM    0(R1),X'80'       Time Sharing User?
+         BNO   INITEXCP          No, perform EXCP initialization.
+         OI    PGMFLAGS,TSU      Yes, flag this for later.
+*
+*         Determine if TSO terminal is suitable
+*
+         GTSIZE
+         LTR   R15,R15           Any problems with GTSIZE?
+         BNZ   ISNOTVDU          Yes, that's very unusual.
+         LTR   R0,R0             Is this a VDU?
+         BNZ   FSMODEON          Yes.
+ISNOTVDU LA    R1,NTVDUMSG       No, display an appropriate message
+         LA    R0,L'NTVDUMSG     on the terminal...
+         TPUT  (1),(0),R
+         LM    R14,R12,12(R13)   and exit with a return code of 8.
+         LA    R15,8
+         BR    R14
+*
+*         Activate VTAM full screen mode
+*
+FSMODEON STM   R0,R1,LINES       Save the current screen size.
+         STFSMODE ON,INITIAL=YES,NOEDIT=YES
+         GTTERM MF=(E,GETTERM)   Get terminal attibutes.
+         LTR   R15,R15           Any problems with GTTERM?
+         BZ    GTTERMOK          No, continue.
+         LA    R3,BKLVLMSG       Yes, point to exit message
+         LA    R2,L'BKLVLMSG     and get its length.
+*
+*         Exit if program requirement not available
+*
+LEAVENOW EQU   *                 Get out of full screen mode.
+         STLINENO LINE=1,MODE=OFF
+         TPUT  (R3),(R2),R       Show termination reason message.
+         L     R13,4(,R13)       Point to caller's save area.
+         LM    R14,R12,12(R13)   Restore registers.
+         LA    R15,8             Set return code to 8.
+         BR    R14               Return to caller.
+*
+*         Perform EXCP initial set up including OPEN and Query
+*
+INITEXCP SLR   R15,R15           Set the entry code of zero.
+         BAL   R14,EXCP3270      Open the EXCP file.
+         B     QUERYGOT          Process Query Reply.
+*
+*         Determine if primary or alternate size will be used
+*
+GTTERMOK CLC   LINES+3(1),TRMALTSZ
+         BNE   SCREENOK          Not in alternate size currently.
+         CLC   COLUMNS+3(1),TRMALTSZ+1
+         BNE   SCREENOK          Not in alternate size currently.
+*   Currently the screen has its alternate size, but can it be used?
+*   3270 graphics is only defined for screens with 80 columns.
+*   Assume the primary size does have 80 - it's almost always 24 x 80.
+         CLI   COLUMNS+3,80      Does alternate size have 80 cols?
+         BNE   SCREENOK          No, use primary screen size.
+         MVI   RESETAID+1,X'7E'  Yes, use alternate screen size.
+*
+*         Determine if Query can be issued
+*
+SCREENOK LA    R3,NOQRYMSG       Point to exit message
+         LA    R2,L'NOQRYMSG     and get its length.
+         TM    TERMATTR+3,X'01'  Is the Query bit on?
+         BZ    LEAVENOW          No, can't do a Query, so go away.
+*
+*         Query TSO terminal
+*
+         LA    R1,RESETAID       Reset the terminal AID and wait
+         LA    R0,L'RESETAID     until this is done (with HOLD)
+         ICM   R1,8,=X'0B'       before proceeding.
+         TPUT  (1),(0),R         TPUT FULLSCR,WAIT,HOLD.
+*   The EW or EWA in RESETAID has now set the screen to the size
+*   that will be used.  This is important in case it affects the
+*   character cell pixel dimensions returned by Query.
+         TPG   QUERY,L'QUERY,NOEDIT,WAIT
+*
+*         Issue TGET to read Query Reply
+*
+QRYREGET LA    R1,BUFFER         Point to input buffer.
+         LA    R0,1024           Get buffer length.
+         ICM   R1,8,TGETFLG      Flags for TGET ASIS,WAIT.
+         TGET  (1),(0),R         TGET ASIS,WAIT.
+         CLI   BUFFER,X'6E'      VTAM reshow request?
+         BE    QRYREGET          Yes, ignore and get Query response.
+QUERYGOT CLI   BUFFER,X'88'      Query response AID?
+         BNE   QERYDONE          No, unexpected response, forget Query.
+         OI    GRAFLAGS,DIDQRY   Yes, remember that Query worked.
+         LR    R3,R1             Copy TGET data length.
+         SLR   R4,R4             Clear for inserts.
+         LA    R5,BUFFER+1       Point past the AID.
+         BCT   R3,QUERYPRS       Decrement for AID.
+         B     QERYDONE          Just in case the AID was it.
+*
+*         Main Structured Field check loop
+*
+QUERYPRS CLI   2(R5),X'81'       Query Reply ID?
+         BNE   NXTSBFLD          No, ignore this structured field.
+         CLI   3(R5),X'86'       Query Reply Color ID?
+         BE    QUERYCLR          Yes, process color support data.
+         CLI   3(R5),X'87'       Query Reply Highlighting ID?
+         BE    QUERYHLT          Yes, process highlight support data.
+         CLI   3(R5),X'85'       Query Reply Symbol Sets ID?
+         BE    QUERYSYM          Yes, process symbol sets support data.
+         CLI   3(R5),X'A6'       Query Reply Implicit Partition ID?
+         BE    QUERYIMP          Yes, process it.
+         CLI   3(R5),X'81'       Query Reply Usable Area ID?
+         BE    QUERYUSE          Yes, process it.
+         CLI   3(R5),X'B4'       Graphic Color ID?
+         BE    QUERYVEC          Yes, process it.
+NXTSBFLD ICM   R4,3,0(R5)        Load structured field length.
+         SR    R3,R4             Subtract it from TGET data length.
+         BNP   QERYDONE          End of Query structured fields.
+         AR    R5,R4             Point to next sub-field.
+         B     QUERYPRS          Examine it.
+*
+*         Check Structured Field x'86' - Color
+*
+QUERYCLR CLI   5(R5),8           At least eight color pairs?
+         BL    NXTSBFLD          No, no 7-color support.
+         CLC   8(14,R5),=CL14'11223344556677' Yes, all 7 supported?
+         BNE   NXTSBFLD          No, probably a monochrome terminal.
+         OI    GRAFLAGS,COLR7    Yes, flag color support certainty.
+         B     NXTSBFLD          Extended capability now flagged.
+*
+*         Check Structured Field x'87' - Highlighting
+*
+QUERYHLT CLI   4(R5),4           At least four highlighting pairs?
+         BL    NXTSBFLD          No, so do not flag it.
+         CLC   7(6,R5),=CL6'112244' Yes, blink, reverse, underscore ok?
+         BNE   NXTSBFLD          No.
+         OI    GRAFLAGS,HLIT     Yes, flag hilighting support veracity.
+         B     NXTSBFLD          Extended capability now flagged.
+*
+*         Check Structured Field x'85' - Character Sets
+*
+QUERYSYM TM    4(R5),X'80'       Is Graphic Escape supported?
+         BZ    GOTGEBIT          No, so do not flag it.
+         OI    GRAFLAGS,GEOK     Yes, flag GE support present.
+GOTGEBIT MVC   CHARSIZE,6(R5)    Save character matrix dimensions.
+         TM    4(R5),X'20'       Is Load Programmed Symbols supported?
+         BNO   NXTSBFLD          No, can't do character graphics.
+         TM    8(R5),X'40'       Format type 1 supported by terminal?
+         BNO   NXTSBFLD          No, can't do our character graphics.
+         SLR   R0,R0
+         SLR   R1,R1
+         IC    R0,12(,R5)        Get symbol set descriptor length.
+         LA    R15,13(,R5)       Point to first descriptor.
+         ICM   R1,3,0(R5)        Get length of whole subfield.
+         SH    R1,=H'13'         Get length of all descriptors.
+         BNP   NXTSBFLD          Handle no descriptors present.
+SYMSTGID CR    R0,R1             Found last RWS?
+         BE    GOTRWSTG          Yes, look at it.
+         SR    R1,R0             No, subtract length.
+         BNP   NXTSBFLD          Handle end of sub-field.
+         AR    R15,R0            Point to next descriptor.
+         B     SYMSTGID          Look at it.
+GOTRWSTG TM    1(R15),X'80'      Loadable terminal storage?
+         BZ    NXTSBFLD          No, forget all this.
+         OI    GRAFLAGS,FMT1     Yes, looks good.
+         TM    1(R15),X'40'      Triple-plane?
+         BZ    FMT1MONO          No, single-plane.
+         TM    4(R5),X'10'       Is LPS extension supported?
+         BNO   FMT1MONO          No, can't load color planes.
+         OI    GRAFLAGS,TRIP     Can use multi-color symbols.
+         MVC   TRPSTGID,0(R15)   Set triple-plane RWS ID.
+         MVC   TRPSTGID+ADDPLNLN,0(R15)
+         MVC   TRPSTGID+ADDPLNLN+ADDPLNLN,0(R15)
+         CLI   0(R15),X'02'      Only one RWS?
+         BH    FMT1MONO          No, as expected.
+         MVI   SNGLLCID,X'47'    Odd, only 1 RWS - and it's a triple.
+FMT1MONO TM    PGMFLAGS,TSU      Time Sharing User?
+         BNO   FMT1EXCP          No, use EXCP.
+         TPUT  PSAWSF,PSALEN,NOEDIT,WAIT
+         TM    GRAFLAGS,TRIP     Triple-plane symbols available?
+         BNO   NXTSBFLD          No.
+         TPUT  PSFWSF,PSFLEN,NOEDIT,WAIT
+         B     NXTSBFLD          Program symbols sub-field now done.
+FMT1EXCP LA    R15,16            Set entry code of sixteen.
+         BAL   R14,EXCP3270      Use EXCP to load program symbols.
+         B     NXTSBFLD          Program symbols sub-field now done.
+*
+*         Check Structured Field x'A6' - Implicit Partition
+*
+QUERYIMP TM    PGMFLAGS,TSU      Time Sharing User?
+         BO    NXTSBFLD          Yes, use GTSIZE/GTTERM for sizes.
+         CLI   1(R5),17          Length less than seventeen?
+         BL    NXTSBFLD          Yes, ignore.
+         CLI   6(R5),11          Parameter length less than eleven?
+         BL    NXTSBFLD          Yes, ignore.
+         CLI   7(R5),1           Implicit partition sizes?
+         BNE   NXTSBFLD          No, ignore.
+         MVC   TERMSIZE(1),12(R5)          Copy primary lines.
+         MVC   TERMSIZE+1(1),10(R5)        Copy primary columns.
+         MVC   TRMALTSZ(1),16(R5)          Copy alternate lines.
+         MVC   TRMALTSZ+1(1),14(R5)        Copy alternate columns.
+         B     NXTSBFLD
+*
+*         Check Structured Field x'81' - Usable Area
+*
+QUERYUSE TM    4(R5),X'01'       14-bit screen addressing supported?
+         BZ    *+8               No.
+         OI    GRAFLAGS,ADR14    Yes, remember this.
+         B     NXTSBFLD          Extended capability now flagged.
+*
+*         Check Structured Field x'B4' - Graphic Color
+*
+QUERYVEC OI    GRAFLAGS,VCTR     Flag native vector grpahics usable.
+         B     NXTSBFLD          Extended capability now flagged.
+*
+*         Determine if terminal is suitable for use
+*
+QERYDONE TM    PGMFLAGS,TSU      Time Sharing User?
+         BNO   FSMODEOK          No.
+         STFSMODE ON,NOEDIT=NO   Get out of NOEDIT input mode.
+FSMODEOK TM    GRAFLAGS,COLR7+HLIT+FMT1
+         BO    PROGSYMS          Programed sysbols are now loaded.
+         LA    R3,NOGRFMSG       Point to exit message
+         LA    R2,L'NOGRFMSG     and get its length.
+         TM    PGMFLAGS,TSU      Time Sharing User?
+         BO    LEAVENOW          Yes, show message and exit.
+         LA    R1,NOGRXMSG       Point to exit message
+         LA    R0,L'NOGRXMSG(,R2) and get its length.
+         LA    R15,4             Set entry code for WRITE.
+         BAL   R14,EXCP3270      Display message.
+         ABEND 222               Terminate abnormally.
+PROGSYMS TM    PGMFLAGS,TSU      Time Sharing User?
+         BO    INITCALC          Yes, everything is ready to go.
+         LA    R1,TERMSIZE       Prepare for using primary size.
+         CLI   TRMALTSZ+1,80     Does alternate have 80 columns?
+         BNE   EXCPSIZE          No, so use primary size.
+         LA    R1,TRMALTSZ       Yes, use the probably larger size.
+         OI    PGMFLAGS,EWALT    Now need an Erase/Write Alternate.
+         MVI   RESETAID+1,X'7E'  Flag using alternate screen size.
+EXCPSIZE MVC   LINES+3(1),0(R1)  Load the screen dimensions.
+         MVC   COLUMNS+3(1),1(R1)
+*
+*         Calculate dimensional and movement limits
+*
+INITCALC L     R1,COLUMNS        Get screen width.
+         AR    R1,R1             Double it.
+         ST    R1,MINLIMIT       Save ORIGIN lower limit.
+         AR    R1,R1             Double it again.
+         LA    R1,20(,R1)        Add a few columns.
+         ST    R1,ORIGIN         Save initial buffer address origin.
+         L     R1,LINES
+         LA    R3,10
+         SR    R1,R3             Get screen line count minus 10.
+         LA    R3,2+TTELEN
+         M     R0,COLUMNS
+         SR    R1,R3
+         ST    R1,MAXLIMIT       Save ORIGIN upper limit.
+*
+*   If this program supported native 3270 vector graphics terminals,
+*   the arithmetic to calculate the scrolling limits would need to
+*   take into account the screen size as measured in pixels.  This
+*   is because it is pixel coordinates that are used in 3270 vector
+*   graphics orders, with the centre of the screen being (0,0).
+*
+*        TM    GRAFLAGS,VCTR     Using vector graphics?
+*        BZ    MAKESCRN          No, caculations of limits done.
+*        SLR   R15,R15           Clear for insert.
+*        SLR   R14,R14           Clear for insert.
+*        IC    R15,CHARSIZE      Get character pixel width.
+*        IC    R14,CHARSIZE+1    Get character pixel depth.
+*        MH    R15,COLUMNS+2     Get pixel width of screen.
+*        MH    R14,LINES+2       Get pixel depth of screen.
+*        SRA   R15,1             Get maximum X absolute value.
+*        SRA   R14,1             Get maximum Y absolute value.
+*        ...
+*
+*         Generate data stream for top screen line
+*
+MAKESCRN LA    R2,BUFFER         Point to the data stream buffer.
+         MVI   0(R2),WRT         Supply a standard write.
+         MVI   1(R2),WCCSTND     Supply a WCC.
+         MVI   2(R2),SBA         Generate top screen line.
+         SR    R1,R1
+         BAL   R14,CALCPOSI      Get screen address for location 0.
+         STCM  R1,3,3(R2)        Top left corner.
+         MVI   5(R2),IC          As good a spot as any for cursor.
+         MVI   6(R2),SF
+         MVI   7(R2),PROHIS      A single field for the whole screen.
+         MVI   8(R2),SA
+         MVI   9(R2),COLR
+         MVI   10(R2),WHITE
+         LA    R2,11(,R2)        Point past data so far.
+         TM    GRAFLAGS,TRIP     Is the triple-plane symbol loaded?
+         BNO   DASHLINE          No.
+         MVI   0(R2),SA          Yes.
+         MVI   1(R2),SYMS
+         MVI   2(R2),X'47'       Triple-plane symbol LCID.
+         LA    R2,3(,R2)         Point past data so far.
+DASHLINE MVI   0(R2),RA
+         L     R1,COLUMNS        Get screen width.
+         BAL   R14,CALCPOSI      Get screen address.
+         STCM  R1,3,1(R2)        Fill top line with character.
+         MVI   3(R2),C'-'        Show dashes = x'60' = snazzy symbol.
+         TM    GRAFLAGS,TRIP     Is the triple-plane symbol loaded?
+         BO    APLDONE           Yes, use it.
+         TM    GRAFLAGS,GEOK     APL characters available?
+         BZ    APLDONE           No, just use a regular minus.
+         MVI   3(R2),GE          Yes, supply the GE.
+         MVI   4(R2),X'A2'       Show continuous horizontal line.
+         LA    R2,1(,R2)         Account for extra byte in RA order.
+APLDONE  MVI   4(R2),SA
+         STCM  R5,12,5(R2)       Reset all character attributes.
+         MVC   7(L'LINE2,R2),LINE2
+         LA    R2,7+L'LINE2(,R2) Point past data generated so far.
+*
+*         Generate data stream for detail lines
+*
+         LA    R3,X'41'          Get initial code point to show.
+         LA    R4,TEXTTAB        Point to color codes and text.
+         LA    R5,6              Get number lines to display.
+         L     R6,ORIGIN         Get mobile part current location.
+         L     R7,COLUMNS
+         AR    R7,R7             Get increment between display lines.
+LINELOOP MVI   0(R2),RA          No.
+         LR    R1,R6             Get current location.
+         BAL   R14,CALCPOSI      Get screen address.
+         STCM  R1,3,1(R2)        Place it in buffer.
+         MVI   3(R2),C' '        Blanks up to start of this line.
+         LA    R2,4(,R2)         Point past RA order.
+         MVI   0(R2),SA
+         MVI   1(R2),SYMS
+         MVC   2(1,R2),SNGLLCID  Supply LCID for single-plane symbols.
+         MVI   3(R2),SA
+         MVI   4(R2),COLR
+         MVC   5(1,R2),0(R4)     Supply color for this entry.
+         STC   R3,6(,R2)         Load first symbol.
+         LA    R3,1(,R3)         Increment code point.
+         STC   R3,7(,R2)         Load second symbol.
+         LA    R3,1(,R3)         Increment code point.
+         MVI   8(R2),SA
+         MVI   9(R2),SYMS
+         MVI   10(R2),X'00'      Default character set.
+         MVI   11(R2),SA
+         MVI   12(R2),COLR
+         MVI   13(R2),X'F5'      Turqouise for text.
+*                                Load text for this line.
+         MVC   14(TTELEN-1,R2),1(R4)
+*                                Point past data stream for this line.
+         LA    R2,14+TTELEN-1(,R2)
+         LA    R4,TTELEN(,R4)    Point to next TEXTTAB entry.
+         AR    R6,R7             Point to next display line location.
+         BCT   R5,LINELOOP       Go process next line.
+         MVI   0(R2),RA
+         SR    R1,R1
+         BAL   R14,CALCPOSI      Get screen address for location 0.
+         STCM  R1,3,1(R2)
+         MVI   3(R2),C' '        Repeat blanks to end of screen.
+         LA    R2,4(,R2)         Point past complete data stream.
+*
+*         Write the resultant screen image to the terminal
+*
+         TM    PGMFLAGS,RESHOW   Is a reshow required?
+         BNO   RESHOWOK          No, a normal WRITE will suffice.
+         MVC   BUFFER(1),RESETAID+1
+         NI    PGMFLAGS,255-RESHOW
+RESHOWOK LR    R0,R2             Correct write command code now set.
+         LA    R1,BUFFER         Point to the data stream.
+         SR    R0,R1             Get its length.
+         TM    PGMFLAGS,TSU      Time Sharing User?
+         BNO   EXCPIO            No, use EXCP file I/O.
+         ICM   R1,8,=X'03'       Load flags for FULLSCR.
+         TPUT  (1),(0),R         TPUT FULLSCR.
+*   Note that if a TPUT NOEDIT were to be used here with the intention
+*   of issuing a subsequent TGET then the WCC sent in the TPUT NOEDIT
+*   should have the x'02' bit set to unlock the keyboard.  If this is
+*   not done the user might have to press RESET before data entry.
+*   TSO/VTAM will unlock the keyboard when a TGET is issued after
+*   TPUTs other than NOEDIT are used.
+*----------------------------------------------------------------------
+*
+*         Read the response from the user
+*
+         LA    R1,BUFFER         Point to the TGET buffer.
+         LA    R0,1024           Expect that will avoid RC=12.
+         ICM   R1,8,TGETFLG      Load flags for TGET ASIS,WAIT.
+         TGET  (1),(0),R         TGET ASIS,WAIT.
+         CH    R15,=H'12'        Data too long to fit?
+         BNE   TCLRQOK           No.
+         TCLEARQ INPUT           Yes, flush the excess data.
+TCLRQOK  CH    R1,=H'3'          Was it a short read?
+         BNL   READLONG          No.
+         OI    PGMFLAGS,RESHOW   Yes, probably a reshow request.
+         B     MAKESCRN
+*
+*         Perform EXCP file I/O
+*
+EXCPIO   LA    R15,4             Set entry code of four.
+         BAL   R14,EXCP3270      Write the data stream.
+         LA    R15,8             Set entry code of eight.
+         BAL   R14,EXCP3270      Read the user input.
+         TM    PGMFLAGS,XCPO     Is the EXCP file still open?
+         BNO   EXCPEND           No, probably STOP command issued.
+*
+*         Inspect input for Program Function Key
+*
+READLONG CLI   BUFFER,X'F3'      PF3?
+         BE    END
+         CLI   BUFFER,X'F7'      PF7?
+         BE    UP
+         CLI   BUFFER,X'F8'      PF8?
+         BE    DOWN
+         CLI   BUFFER,X'7A'      PF10?
+         BE    LEFT
+         CLI   BUFFER,X'7B'      PF11?
+         BE    RIGHT
+         CLI   BUFFER,X'C3'      PF15?
+         BE    END
+         CLI   BUFFER,X'C7'      PF19?
+         BE    UP
+         CLI   BUFFER,X'C8'      PF20?
+         BE    DOWN
+         CLI   BUFFER,X'4A'      PF22?
+         BE    LEFT
+         CLI   BUFFER,X'4B'      PF23?
+         BE    RIGHT
+         B     MAKESCRN
+*
+*         Move displayed data location on screen
+*
+UP       L     R1,ORIGIN
+         S     R1,COLUMNS
+         C     R1,MINLIMIT
+         BL    MAKESCRN
+         ST    R1,ORIGIN
+         B     MAKESCRN
+DOWN     L     R1,ORIGIN
+         A     R1,COLUMNS
+         C     R1,MAXLIMIT
+         BH    MAKESCRN
+         ST    R1,ORIGIN
+         B     MAKESCRN
+LEFT     L     R1,ORIGIN
+         BCTR  R1,0
+         C     R1,MINLIMIT
+         BL    MAKESCRN
+         ST    R1,ORIGIN
+         B     MAKESCRN
+RIGHT    LA    R1,1
+         A     R1,ORIGIN
+         C     R1,MAXLIMIT
+         BH    MAKESCRN
+         ST    R1,ORIGIN
+         B     MAKESCRN
+*
+*         Terminate
+*
+END      TM    PGMFLAGS,TSU      Time Sharing User?
+         BNO   EXCPEND           No, must be using EXCP.
+         STLINENO LINE=1,MODE=OFF
+         L     R13,4(,R13)       Point to caller's save area.
+         LM    R14,R12,12(R13)   Restore registers.
+         SR    R15,R15           Set return code to 8.
+         BR    R14               Return to caller.
+EXCPEND  LA    R15,12            Set the entry code of twelve.
+         BAL   R14,EXCP3270      Close the EXCP file.
+         L     R13,4(,R13)       Point to caller's save area.
+         LM    R14,R12,12(R13)   Restore registers.
+         SR    R15,R15           Set return code to 8.
+         BR    R14               Return to caller.
+*
+*         Calculate 12-bit 3270 buffer address from 14-bit address
+*
+*              Input - R1 = Relative byte location
+*             Output - R1 = Two-byte data stream address (low halfword)
+*
+CALCPOSI CLM   R1,X'3',MAX12BIT  Location greater than 4K (12 bits)?
+         BHR   R14               Yes, no conversion to be done.
+***      TM    GRAFLAGS,ADR14    14-bit addressing supported?
+***      BOR   R14               Yes, no conversion need be done.
+         STC   R1,WORK+1         No, do original 3270 addressing.
+         NI    WORK+1,X'3F'      Get low-order six-bit number.
+         SRL   R1,6
+         STC   R1,WORK           Get high-order six-bit number.
+         TR    WORK(2),TABLE     Convert to 3270 data stream chars.
+         ICM   R1,3,WORK         Save in lower two bytes of register.
+         BR    R14               Return to caller
+         TITLE 'VARIABLES AND CONSTANTS'
+         LTORG
+         DC    0D'0'
+*
+*         Table used for 3270 12-bit addressing
+*
+TABLE    DC    X'40C1C2C3C4C5C6C7C8C94A4B4C4D4E4F'
+         DC    X'50D1D2D3D4D5D6D7D8D95A5B5C5D5E5F'
+         DC    X'6061E2E3E4E5E6E7E8E96A6B6C6D6E6F'
+         DC    X'F0F1F2F3F4F5F6F7F8F97A7B7C7D7E7F'
+*
+*         Working variables
+*
+SAVE     DC    18F'0'            Register save area.
+WORK     DC    D'0'              Work area.
+LINES    DC    F'0'              Number of lines on screen.
+COLUMNS  DC    F'0'              Number of columns on screen.
+ORIGIN   DC    F'0'              Top left corner of movable data.
+MINLIMIT DC    F'0'              Minimum allowed value of ORIGIN.
+MAXLIMIT DC    F'0'              Maximum allowed value of ORIGIN.
+TSOFIELD DC    F'0'              Address of TSO flag.
+EXTRTSO  EXTRACT TSOFIELD,'S',FIELDS=(TSO),MF=L
+TERMSIZE DC    H'0'              Primary size lines and columns.
+TRMALTSZ DC    H'0'              Alternate size lines and columns.
+TERMATTR DC    F'0'              Terminal attributes.
+GETTERM  GTTERM PRMSZE=TERMSIZE,ALTSZE=TRMALTSZ,ATTRIB=TERMATTR,MF=L
+MAX12BIT DC    H'4095'           Maximum 12-bit addressing location.
+CHARSIZE DC    X'0000'           Character cell pixel width and depth.
+*
+*         Detail line color codes and text
+*
+TEXTTAB  DC    C'2',CL39' -  Surface  contact - Hostile'
+TTELEN   EQU   *-TEXTTAB
+         DC    C'2',CL39' - Submerged contact - Hostile'
+         DC    C'6',CL39' -  Surface  contact - Unidentified'
+         DC    C'6',CL39' - Submerged contact - Unidentified'
+         DC    C'4',CL39' -  Surface  contact - Friendly'
+         DC    C'4',CL39' - Submerged contact - Friendly'
+LINE2    DC    C'GRFXSAMP (GP@P6 2008)   PFKs: 3=End 7=Up 8=Down 10=Lef+
+               t 11-Right'
+*
+*         Terminate reason messages
+*
+NTVDUMSG DC    C'GRFXSAMP requires a 3270 display.'
+BKLVLMSG DC    C'GRFXSAMP requires TSO/VTAM function which does not app+
+               ear to be supported by this system'
+NOQRYMSG DC    C'The VTAM LOGMODE used by this terminal does not suppor+
+               t 3270 EDS'
+NOGRXMSG DC    X'C71140401DC8'
+NOGRFMSG DC    C'No usable 3270 graphics support was detected.'
+*
+*         Flag bytes
+*
+PGMFLAGS DC    X'00'            Program status flags.
+TSU      EQU   X'80'            Time Sharing User flag.
+XCPO     EQU   X'40'            EXCP DCB Open flag.
+AID      EQU   X'20'            Attention-IDentifier-set flag.
+EWALT    EQU   X'10'            Erase/Write-Alternate-to-be-used flag.
+RESHOW   EQU   X'08'            A screen refresh is needed.
+*
+GRAFLAGS DC    X'00'            Extended data stream support flags.
+DIDQRY   EQU   X'80'            Query was issued; correct AID returned.
+COLR7    EQU   X'40'            Seven-color support verified by Query.
+HLIT     EQU   X'20'            Highlighting support verified by Query.
+ADR14    EQU   X'10'            14-bit screen addressing supported.
+FMT1     EQU   X'08'            Format 1 symbols can be loaded.
+GEOK     EQU   X'04'            Use graphic escapes in data stream.
+TRIP     EQU   X'02'            Triple-plane symbols can be used.
+VCTR     EQU   X'01'            Native 3270 Vector Graphics available.
+*
+TGETFLG  DC    X'81'            Flag byte for TGETs.
+TGETFLGE EQU   X'80'            Flag byte for EDIT TGETs.
+TGETFLGA EQU   X'81'            Flag byte for ASIS TGETs.
+TGETFLGN EQU   X'91'            Flag byte for ASIS NOWAIT TGETs.
+*
+*         Pre-coded 3270 data streams
+*
+RESETAID DC    X'27F1C3'        Escape, Write, WCC.
+         SPACE
+QUERY    DC    X'F3000501FF02'  Write Structured Field, Query.
+         SPACE 2
+PSAWSF   DC    X'F3'            WSF to load symbols into PSA.
+SINGLFLD DC    AL2(SINGLLEN)    Structured field length. (Single-plane)
+         DC    X'0641'          LPS-ID, BASIC+CLR+TYP1.
+SNGLLCID DC    X'42'            LCID.
+         DC    X'41'            Code point for first loaded symbol.
+SNGSTGID DC    X'02'            Read/Write Storage ID.
+         DC    X'0000000103060C1933190C06030100000000'   X'41'
+         DC    X'6730000080C06030983060C0800000000000'   X'42'
+         DC    X'000000000000000033190C06030100000000'   X'43'
+         DC    X'0330000000000000983060C0800000000000'   X'44'
+         DC    X'0000001F1F101011131110101F1F00000000'   X'45'
+         DC    X'673000F0F010101090101010F0F000000000'   X'46'
+         DC    X'0000000000000000131110101F1F00000000'   X'47'
+         DC    X'033000000000000090101010F0F000000000'   X'48'
+         DC    X'000000030C081011131110080C0300000000'   X'49'
+         DC    X'471000806020101090101020608000000000'   X'4A'
+         DC    X'0000000000000000131110080C0300000000'   X'4B'
+         DC    X'031000000000000090101020608000000000'   X'4C'
+SINGLLEN EQU   *-SINGLFLD
+PSALEN   EQU   *-PSAWSF
+         SPACE 2
+PSFWSF   DC    X'F3'            WSF to load symbols into PSF.
+*  BLUE PLANE
+PLNFIELD DC    AL2(ADDPLNLN)    Structured field length. (Triple-plane)
+         DC    X'06C14760'      LPS-ID,EXT+CLR+TYP1,LCID,First-sym.
+TRPSTGID DC    X'03'            Read/Write Storage ID.
+         DC    X'060009100001'  LENE,FLAGS,WIDTH,DEPTH,SUBSN,PLANE.
+         DC    X'CCCCFFFF0000FFFF0000FFFF0000FFFF0000'   X'60'
+ADDPLNLN EQU   *-PLNFIELD
+*   RED PLANE
+         DC    AL2(ADDPLNLN)    Structured field length. (Triple-plane)
+         DC    X'06C14760'      LPS-ID,EXT+CLR+TYP1,LCID,First-sym.
+         DC    X'03'            READ/WRITE STORAGE ID.
+         DC    X'060009100002'  LENE,FLAGS,WIDTH,DEPTH,SUBSN,PLANE.
+         DC    X'F0F0FFFFFFFF00000000FFFFFFFF00000000'   X'60'
+* GREEN PLANE
+         DC    AL2(ADDPLNLN)    Structured field length. (Triple-plane)
+         DC    X'06C14760'      LPS-ID,EXT+CLR+TYP1,LCID,First-sym.
+         DC    X'03'            READ/WRITE STORAGE ID.
+         DC    X'060009100004'  LENE,FLAGS,WIDTH,DEPTH,SUBSN,PLANE.
+         DC    X'FF00FFFFFFFFFFFFFFFF0000000000000000'   X'60'
+PSFLEN   EQU   *-PSFWSF
+         DC    0D'0'
+         TITLE 'EXCP 3270 DISPLAY FILE HANDLER'
+*
+*         On entry registers contain:
+*
+*            R0  - Data length for WRITE and WSF
+*            R1  - Data address for WRITE and WSF
+*        R2-R12  - Caller's data including program base registers
+*           R13  - Register save area address
+*           R14  - Return address
+*           R15  - Function entry code
+*
+*         On exit registers R2-R14 are unchanged.
+*
+         SPACE
+*
+*         Branch to routine for requested function
+*
+EXCP3270 DS    0H
+         L     R15,EXCPADTB(R15) Get routine address.
+         BR    R15               Branch to appropriate routine.
+*
+*         Function 00 - OPEN
+*
+EXCPOPEN DS    0H                Open EXCP DCB if appropriate.
+         EXTRACT MF=(E,EXTRCOMM) Get address of communication list.
+         OPEN  MF=(E,EXOPNCLS)   Open the file.
+         LA    R1,EXCPDCB        Point to the DCB.
+         USING IHADCB,R1
+         TM    DCBOFLGS,DCBOFOPN Did the OPEN work?
+         BZ    BADEXOPN          No.
+         OI    PGMFLAGS,XCPO+AID Yes, remember this.
+         L     R1,DCBDEBAD       Point to the DEB.
+         DROP  R1                IHADCB.
+         L     R1,32(,R1)        Point to the UCB.
+         UNPK  INITUNIT(5),4(3,R1)
+         TR    INITUNIT,HEX-C'0' Show the unit name.
+         MVI   INITUNIT+4,C')'
+         MVC   TERMUNIT,INITUNIT Copy the UCB name.
+         MVC   BADUNIT,INITUNIT
+         SLR   R0,R0
+         ST    R0,EXCPECB        Reset the ECB.
+         EXCP  EXCPIOB           Issue Erase/Write and initial message.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   BADEXCP           No, issue message and terminate.
+         SLR   R0,R0             Yes.
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,QUERYCCW       Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   EXCPXIT4          No, skip Query stuff, pretend a-okay.
+         SLR   R0,R0             Yes.
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,READCCW        Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   BADEXCP           No, issue message and terminate.
+         LA    R1,L'BUFFER       Yes, get requested length.
+         SH    R1,IOBCSW+5       Less residual count for actual length.
+EXCPXIT0 SLR   R15,R15           Set return code of zero.
+         BR    R14               Return to caller.
+EXCPXIT4 LA    R15,4             Set return code of four.
+         BR    R14               Return to caller.
+         SPACE
+BADEXOPN WTO   'EXCP OPEN FAILURE - TASK TERMINATING',                 +
+               ROUTCDE=(2,11)
+         LA    R15,20            Set completion code.
+         SVC   3                 Terminate the current Request Block.
+*
+*         Handle EXCP Error
+*
+BADEXCP  UNPK  BADIOCC(3),EXCPECB(2)
+         TR    BADIOCC,HEX-C'0'  Show I/O completion code.
+         MVI   BADIOCC+2,C' '    Erase garbage.
+         LA    R0,16             Get unit/channel status bit count.
+         LA    R15,IOSTATTB      Point to status label table.
+         ICM   R1,X'C',IOBCSW+3  Load unit and channel status bytes.
+BADSTALP LTR   R1,R1             Is the high bit on?
+         BM    BADSTAOK          Yes.
+         SLL   R1,1              No, promote next bit.
+         LA    R15,16(,R15)      Point to next label.
+         BCT   R0,BADSTALP       Try it.
+         LA    R15,BLANKS        All bits are zero.
+BADSTAOK MVC   BADSTAT,0(R15)    Load I/O status label.
+         LA    R0,8              Get sense byte bit count.
+         LA    R15,IOSENSTB      Point to sense label table.
+         ICM   R1,8,IOBSENS0     Load first sense byte.
+BADSENLP LTR   R1,R1             Is the high bit on?
+         BM    BADSENOK          Yes.
+         SLL   R1,1              No, promote next bit.
+         LA    R15,16(,R15)      Point to next label.
+         BCT   R0,BADSENLP       Try it.
+         LA    R15,BLANKS        All bits are zero.
+BADSENOK MVC   BADSENS,0(R15)    Load I/O sense label.
+         WTO   MF=(E,BADIOWTO)   Issue I/O failure message.
+         CLOSE MF=(E,EXOPNCLS)   Close the file.
+         LA    R15,20            Set completion code.
+         SVC   3                 Terminate the current request block.
+*
+*         Function 04 - WRITE
+*
+EXCPWRIT DS    0H                Issue write to screen.
+         STCM  R1,7,WRITECCW+1   Put data stream address in CCW.
+         STH   R0,WRITECCW+6     Put data stream length in CCW.
+         NI    0(R1),X'04'       Reset WCC except for bell.
+         TM    PGMFLAGS,AID      Is an AID already set?
+         BZ    XFIXWCC           No.
+         OI    0(R1),X'03'       Yes, reset AID/MDT and unlock k/b.
+         NI    PGMFLAGS,255-AID  Reset AID-set flag.
+XFIXWCC  TR    0(1,R1),TABLE     Set WCC "parity" bits.
+         MVI   WRITECCW,X'01'    Load write op-code.
+         TM    PGMFLAGS,EWALT    Erase/write alternate required?
+         BZ    EXCPOPOK          No, op-code is now correct.
+         MVI   WRITECCW,X'0D'    Load erase/write alternate op-code.
+         NI    PGMFLAGS,255-EWALT Flag no longer required.
+EXCPOPOK SLR   R0,R0
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,WRITECCW       Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   BADEXCP           No, issue message and terminate.
+         SLR   R15,R15           Set return code of zero.
+         BR    R14               Return to caller.
+*
+*         Function 08 - READ
+*
+EXCPREAD DS    0H                Issue Read Modified to screen.
+         L     R1,COMMADDR       Point to MODIFY/STOP ECB address.
+         L     R1,0(,R1)         Point to MODIFY/STOP ECB.
+         TM    0(R1),X'40'       Has the ECB been posted?
+         BO    EXCPCLOS          Yes, operator issued STOP command.
+         SLR   R0,R0
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,READCCW        Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   BADEXCP           No, issue message and terminate.
+         CLI   BUFFER,X'60'      Any AID set?
+         BE    EXCPNULL          No.
+         CLI   BUFFER,X'6D'      Clear button hit?
+         BNE   EXCPAID           No.
+         CLI   RESETAID+1,X'7E'  Using alternate screen size?
+         BNE   EXCPAID           No.
+         OI    PGMFLAGS,EWALT    Yes, need an Erase/Write Alternate.
+EXCPAID  OI    PGMFLAGS,AID      Flag AID returned from screen.
+         LA    R1,L'BUFFER       Get requested length.
+         SH    R1,IOBCSW+5       Less residual count for actual length.
+         SLR   R15,R15           Set return code of zero.
+EXCPRRTN BR    R14               Return to caller.
+EXCPNULL LA    R15,4             Set return code of four.
+         CLI   TGETFLG,TGETFLGN  Nowait currently in effect?
+         BE    EXCPRRTN          Yes, return to caller.
+         STIMER WAIT,BINTVL=EXCPWAIT  No, wait a bit.
+         B     EXCPREAD          Now redrive the read.
+*
+*         Function 0C - CLOSE
+*
+EXCPCLOS DS    0H                Close EXCP DCB if it is open.
+         TM    PGMFLAGS,XCPO     Is the EXCP file open?
+         BZR   R14               No, return to caller.
+         TIME  DEC               Yes, get the time.
+         STCM  R0,4,TERMMSG+6    Show it in the termination message.
+         OI    TERMMSG+6,X'F0'
+         STCM  R0,8,TERMMSG+3
+         OI    TERMMSG+3,X'F0'
+         SRL   R0,4
+         STCM  R0,4,TERMMSG+5
+         OI    TERMMSG+5,X'F0'
+         STCM  R0,8,TERMMSG+2
+         OI    TERMMSG+2,X'F0'
+         LA    R1,TERMMSG        Point to the termination message.
+         STCM  R1,7,INITCCW+1    Put data stream address in CCW.
+         LA    R0,TRMSTPLN
+         L     R1,COMMADDR       Point to modify/stop ECB address.
+         L     R1,0(,R1)         Point to modify/stop ECB.
+         TM    0(R1),X'40'       Has the ECB been posted?
+         BO    TRMLENOK          Yes, operator issued STOP command.
+         LA    R0,L'TERMMSG      No, terminal user said to exit.
+TRMLENOK STH   R0,INITCCW+6      Put data stream length in CCW.
+         LA    R1,INITCCW        Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         CLOSE MF=(E,EXOPNCLS)   Close the file.
+         NI    PGMFLAGS,255-XCPO The EXCP file is now closed.
+         SLR   R15,R15           Set return code of zero.
+         BR    R14               Return to caller.
+*
+*         Function 10 - Load Programmed Symbols
+*
+EXCPSYMS DS    0H                Write Structured Field(s).
+         SLR   R0,R0
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,LPSSPCCW       Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         LA    R15,8             Prepare bad return code.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   SYMSEXIT          No, return with non-zero return code.
+         SLR   R15,R15           Yes, set return code of zero.
+         TM    GRAFLAGS,TRIP     Need to load triple-plane symbol?
+         BNO   SYMSEXIT          No.
+         SLR   R0,R0
+         ST    R0,EXCPECB        Reset the ECB.
+         LA    R1,LPSTPCCW       Point to the channel program.
+         ST    R1,IOBSTART       Save its address in the IOB.
+         EXCP  EXCPIOB           Issue the I/O.
+         WAIT  ECB=EXCPECB       Wait for I/O completion.
+         LA    R15,8             Prepare bad return code.
+         CLI   EXCPECB,X'7F'     Normal completion?
+         BNE   SYMSEXIT          No, return with non-zero return code.
+         SLR   R15,R15           Yes, set return code of zero.
+SYMSEXIT BR    R14               Return to caller.
+         TITLE 'EXCP DISPLAY FILE HANDLER - CONSTANTS AND VARIABLES'
+EXCPADTB DS    0F                Routine entry point vector.
+         DC    A(EXCPOPEN)       Entry code 00 - OPEN file and Query.
+         DC    A(EXCPWRIT)       Entry code 04 - Write data stream.
+         DC    A(EXCPREAD)       Entry code 08 - Read Modified.
+         DC    A(EXCPCLOS)       Entry code 0C - CLOSE file.
+         DC    A(EXCPSYMS)       Entry code 10 - Write LPS data stream.
+EXCPWAIT DC    F'50'             Wait half a second.
+EXTRCOMM EXTRACT COMMADDR,'S',FIELDS=(COMM),MF=L
+COMMADDR DC    A(0)              Address of communication list.
+EXOPNCLS DC    AL1(128),AL3(EXCPDCB)
+EXCPECB  DC    F'0'              EXCP event control block.
+         PRINT NOGEN
+EXCPDCB  DCB   DSORG=PS,MACRF=E,DDNAME=IEFRDER,BUFL=4096,RECFM=U,      +
+               IOBAD=EXCPIOB
+         PRINT GEN
+EXCPIOB  DS    0F
+IOBFLAG1 DC    X'02'
+IOBFLAG2 DC    X'00'
+IOBSENS0 DC    X'00'
+IOBSENS1 DC    X'00'
+IOBECBCC EQU   *,1
+IOBECBPT DC    A(EXCPECB)                      ECB
+IOBFLAG3 DC    X'00'
+IOBCSW   DC    XL7'00000000000000'
+IOBSIOCC EQU   *,1
+IOBSTART DC    A(INITCCW)                      CH PGM
+IOBFLAG4 EQU   *,1
+IOBDCBPT DC    A(EXCPDCB)                      DCB ADD
+IOBRESTR DC    X'00000000'
+IOBINCAM DC    H'0'
+IOBERRCT DC    H'0'
+         DC    XL8'0000000000000000'           UCB INDEX
+INITCCW  CCW   X'05',INITMSG,X'20',L'INITMSG   Erase/Write.
+EWALTCCW CCW   X'0D',BLANKS,X'20',1            Erase/Write Alternate.
+QUERYCCW CCW   X'11',QUERY+1,X'20',L'QUERY-1   WSF - Query.
+LPSSPCCW CCW   X'11',SINGLFLD,X'20',SINGLLEN   WSF - single-plane LPS.
+LPSTPCCW CCW   X'11',PLNFIELD,X'20',PSFLEN-1   WSF - triple-plane LPS.
+WRITECCW CCW   X'01',0,X'20',0                 Write.
+READCCW  CCW   X'06',BUFFER,X'20',L'BUFFER     Read Modified.
+HEX      DC    CL16'0123456789ABCDEF'
+BLANKS   DC    CL16' '
+IOSTATTB DS    0F
+         DC    CL16'ATTENTION       '
+         DC    CL16'STATUS MODIFIER '
+         DC    CL16'CONTROL UNIT END'
+         DC    CL16'BUSY            '
+         DC    CL16'CHANNEL END     '
+         DC    CL16'DEVICE END      '
+         DC    CL16'UNIT CHECK      '
+         DC    CL16'UNIT EXCEPTION  '
+         DC    CL16'PGM CNTL INTERPT'
+         DC    CL16'INCORRECT LENGTH'
+         DC    CL16'PROGRAM CHECK   '
+         DC    CL16'PROTECTION CHECK'
+         DC    CL16'CHANNEL DATA CHK'
+         DC    CL16'CHANNEL CNTL CHK'
+         DC    CL16'INTRFACE CTL CHK'
+         DC    CL16'CHAINING CHECK  '
+IOSENSTB DS    0F
+         DC    CL16'COMMAND REJECT  '
+         DC    CL16'INTERVENTION REQ'
+         DC    CL16'BUS-OUT CHECK   '
+         DC    CL16'EQUIPMENT CHECK '
+         DC    CL16'DATA CHECK      '
+         DC    CL16'OVERRUN         '
+         DC    CL16'CONTROL CHECK   '
+         DC    CL16'OPERATION CHECK '
+INITMSG  DC    C'G (????) INITIALIZING - PLEASE WAIT'
+INITUNIT EQU   INITMSG+3,4
+TERMMSG  DC    C'G HH:MM  -  (????) ENDED'
+TERMUNIT EQU   TERMMSG+13,4
+         DC    C' DUE TO OPERATOR STOP COMMAND'
+TRMSTPLN EQU   *-TERMMSG
+BADIOWTO WTO   '(????) - EXCP I/O FAILURE - CC=?? - 0123456789ABCDEF - +
+               0123456789ABCDEF',ROUTCDE=(2,11),MF=L
+BADUNIT  EQU   BADIOWTO+5,4
+BADIOCC  EQU   BADIOWTO+35,2
+BADSTAT  EQU   BADIOWTO+40,16
+BADSENS  EQU   BADIOWTO+59,16
+         DC    0D'0'
+         SPACE 2
+*
+*         Terminal I/O Buffer
+*
+BUFFER   DS    CL1024           Can be made larger if necessary.
+         SPACE 2
+         DS    0D               End of CSECT.
+         SPACE 2
+         PRINT NOGEN
+         DCBD  DSORG=BS
+         SPACE 2
+         END   GRFXSAMP

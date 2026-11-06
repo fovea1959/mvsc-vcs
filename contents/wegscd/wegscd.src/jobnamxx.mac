@@ -1,0 +1,28 @@
+JOBNAM   CSECT
+         SAVE  (14,12),,JOBNAM
+         BALR  R12,0
+         USING *,R12
+         ST    R13,SAVEA+4         CHAIN SAVE AREAS
+         LA    R2,SAVEA
+         ST    R2,8(,R13)
+         LR    R13,R2
+*
+         L     R3,0(,R1)           ADDRESS OF CALLER'S 8-BYTE FIELD
+         L     R4,16(,0)           PSA+16 = CVT ADDRESS
+         L     R4,0(,R4)           CVTTCBP -> TCB POINTER WORDS
+         L     R4,4(,R4)           CURRENT TCB
+         L     R4,12(,R4)          TCBTIO -> TIOT
+         MVC   0(8,R3),0(R4)       TIOCNJOB = JOB NAME
+*
+         L     R13,SAVEA+4
+         RETURN (14,12),RC=0
+*
+SAVEA    DC    18F'0'
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R12      EQU   12
+R13      EQU   13
+         END

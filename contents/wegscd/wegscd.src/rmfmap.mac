@@ -1,0 +1,3331 @@
+* FROM CBT TAPE 249, FILE 247
+*          DATA SET CBT900     AT LEVEL 002 AS OF 08/15/78
+*          DATA SET CBT819T    AT LEVEL 003 AS OF 08/14/78
+*
+* RMFMAP -   RMF REDUCTION PROGRAM    (EXECUTION DOCUMENTATION)
+*
+*
+* THE FOLLOWING IS SAMPLE JCL WHICH RUNS TO PRODUCE DAILY REPORTS
+* FOR A 168MP SYSTEM.  EACH DD CARD DESCRIBES ITS GENERAL REPORT
+* CONTENTS.  FOR MORE DETAIL YOU WILL HAVE TO ATTACK THE CODE ITSELF
+* IF ANYTHING IS NOT CLEAR.
+* FOR THOSE OF YOU WITH FAITH,  TRY IT YOU'LL LIKE IT.
+*
+* //MAPMP PROC SYS='B168',     SYSTEM ID
+* //         INTVL='15',       RMF REPORTING INTERVAL (MINUTES)
+* //         SELLO='0800',     SELECTED AVERAGE PERIOD START TIME
+* //         SELHI='1659',     SELECTED AVERAGE PERIOD STOP TIME
+* //         TIMELO='0000',    AVERAGE PERIOD START TIME
+* //         TIMEHI='2359',    AVERAGE PERIOD STOP TIME
+* //         DATELO='77001',   RECORD DATE RANGE START DATE
+* //         DATEHI='99350',   RECORD DATE RANGE STOP DATE
+* //         DEV='S',          DEVICE SELECTION PARM  A=ALL, S=SELECT
+* //         RMFDSN=,          THE RMF RECORD INPUT DATA SET
+* //         MIP=302           SERVICE UNITS PER SECOND OF TASK
+* //*                          EXECUTION TIME.  CPU SECONDS
+* //*                          CALCULATION IS AFFECTED BY THIS NUMBER.
+* //*                          SEE MVS INIT AND TUNING GUIDE,
+* //*                          SELECTING CPU SERVICE DEFINITION
+* //*                          COEFFICIENT FOR TABLE OF VALUES.
+* //*
+         EJECT
+* //MAPMP    EXEC PGM=RMFMAP,
+* // PARM='&SYS&INTVL&SELLO&SELHI&TIMELO&TIMEHI&DATELO&DATEHI&MIP&DEV'
+* //*
+* //SMF    DD  DSN=&RMFDSN.,   RMF RECORD INPUT (70,71,72,73,74,76)
+* //       DISP=SHR,DCB=BFTEK=A
+* //*
+* //*
+* //*  SUMMARY REPORTS FOR CHANNELS, PERFORMANCE GROUPS, AND
+* //*  DEVICES ARE CONSTRAINED BY THE DD CARDS SPECIFIED FOR
+* //*  THE RESPECTIVE DETAIL REPORTS.
+* //*  IF YOU SPECIFY 10 PERFORMANCE GROUPS FOR DETAIL
+* //*  REPORTS YOU WILL GET SUMMARY DATA FOR THOSE SAME 10
+* //*  PERFORMANCE GROUPS.
+* //*  IF YOU SPECIFY 2 CONTROL UNITS OF DEVICES FOR DETAIL
+* //*  REPORTS, YOU WILL GET SUMMARY DATA ONLY FOR THE DEVICES
+* //*  ON THOSE CONTROL UNITS.  DEVICE SUMMARY IS ALSO LIMITED TO
+* //*  THE FIRST 50 UNIQUE ENTRIES.
+* //*  TRACE SUMMARY DATA IS PRODUCED FOR ALL TRACE ENTRIES SPECIFIED
+* //*  IN THE RMF PARAMETERS UP TO A MAXIMUM OF 50 UNIQUE ENTRIES.
+* //*
+* //MAP1   DD  SYSOUT=A   SUMMARY RPT -   CPU AND PAGING
+* //MAP2   DD  SYSOUT=A   SUMMARY RPT -   FRAMES, SWAPS, AND CHANNELS
+* //TODMAP DD  DUMMY      TOD OUTPUT -    INPUT TO GRAPH PROGRAM
+* //SHFMAP DD  DUMMY      SHIFT OUTPUT -  INPUT TO GRAPH PROGRAM
+* //PCTMAP DD  SYSOUT=A   SUMMARY RPT -   CUMULATIVE CPU/PAGING/CHANNEL
+* //MAP3   DD  SYSOUT=A   SUMMARY RPT -   PERF. GRPS, TRACE AND DEVICES
+* //*
+* //CPU    DD  SYSOUT=A   BAR GRAPH -     CPU BUSY
+* //PAG1   DD  SYSOUT=A   BAR GRAPH -     TOTAL PAGING
+* //PAG2   DD  SYSOUT=A   BAR GRAPH -     PAGE RECLAIMS
+* //PAG3   DD  SYSOUT=A   BAR GRAPH -     ADDRESS SPACE PAGING
+* //PAG4   DD  SYSOUT=A   BAR GRAPH -     COMMON AREA PAGING
+* //PAG5   DD  SYSOUT=A   BAR GRAPH -     VIO PAGING
+* //PAG6   DD  SYSOUT=A   BAR GRAPH -     SWAP PAGING AND PAGE FAULTS
+* //FRAME  DD  SYSOUT=A   DETAIL RPT -    PAGE FRAME UTILIZATION
+* //SWAP   DD  SYSOUT=A   DETAIL RPT -    SWAP COUNTS
+* //*
+         EJECT
+* //CLIST  DD  SYSOUT=A   LIST RPT -      CHANNEL DESCRIPTIONS
+* //*
+* //* CHACBC IS THE DDNAME FORMAT OF THE CHANNEL BAR GRAPH DDNAMES
+* //*   WHERE 'A' AND 'B' ARE CPU IDS (0 OR 1) IN ANY COMBINATION AND
+* //*   'C' IS ANY CHANNEL ID (0 - F).  TO PRODUCE ACCURATE SUMMARY
+* //*   REPORTS FOR CHANNELS, THE CHANNELS MUST BE MAPPED AGAINST THE
+* //*   DD CARDS IN ASCENDING ORDER PRIOR TO ANY CROSS MAPPING SUCH AS
+* //*   MAPPING PRIMARY AND ALTERNATE CHANNELS TOGETHER.
+* //*   THE EXAMPLE PROVIDED BELOW FOR THE CHANNEL DD CARDS IS FOR A
+* //*   168MP WITH 8 CHANNELS ON EACH SIDE.
+* //*
+* //*   NOTE THAT A MAXIMUM OF 20 CHANNEL DD CARDS IS ALLOWED
+* //*
+* //CH0010 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN0   CPU1 CHAN0
+* //CH0111 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN1   CPU1 CHAN1
+* //CH0212 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN2   CPU1 CHAN2
+* //CH0313 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN3   CPU1 CHAN3
+* //CH0414 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN4   CPU1 CHAN4
+* //CH0515 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN5   CPU1 CHAN5
+* //CH0616 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN6   CPU1 CHAN6
+* //CH0717 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN7   CPU1 CHAN7
+* //CH0102 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN1   CPU0 CHAN2
+* //CH0103 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN1   CPU0 CHAN3
+* //CH0203 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN2   CPU0 CHAN3
+* //CH0307 DD  SYSOUT=A   BAR GRAPH -     CPU0 CHAN3   CPU0 CHAN7
+* //CH1112 DD  SYSOUT=A   BAR GRAPH -     CPU1 CHAN1   CPU1 CHAN2
+* //CH1113 DD  SYSOUT=A   BAR GRAPH -     CPU1 CHAN1   CPU1 CHAN3
+* //CH1213 DD  SYSOUT=A   BAR GRAPH -     CPU1 CHAN2   CPU1 CHAN3
+* //CH1317 DD  SYSOUT=A   BAR GRAPH -     CPU1 CHAN3   CPU1 CHAN7
+* //*
+* //DEVNAME  DD  DUMMY    OFFENSIVE DEVICE OUTPUT (INPUT TO OTHER PGM)
+* //*
+* //DLIST  DD  SYSOUT=A   LIST RPT -      VOLSER LIST (1ST RMF INTRVAL)
+* //*
+* //* DVXX IS THE DDNAME FORMAT OF THE DEVICE DETAIL REPORT DDNAMES
+* //*   WHERE 'XX' IS THE CONTROL UNIT ID OF THE DEVICES TO BE REPORTED
+* //*
+* //*   NOTE THAT A MAXIMUM OF 20 DEVICE DD CARDS IS ALLOWED
+* //*
+* //DV11   DD  SYSOUT=A   DETAIL RPT -    DEVICES (110-11F)
+* //DV14   DD  SYSOUT=A   DETAIL RPT -    DEVICES (140-14F)
+* //DV15   DD  SYSOUT=A   DETAIL RPT -    DEVICES (150-15F)
+* //DV17   DD  SYSOUT=A   DETAIL RPT -    DEVICES (170-17F)
+* //DV28   DD  SYSOUT=A   DETAIL RPT -    DEVICES (280-28F)
+* //DV29   DD  SYSOUT=A   DETAIL RPT -    DEVICES (290-29F)
+* //DV3C   DD  SYSOUT=A   DETAIL RPT -    DEVICES (3C0-3CF)
+* //DV3D   DD  SYSOUT=A   DETAIL RPT -    DEVICES (3D0-3DF)
+         EJECT
+* //*
+* //* PGNNN IS THE DDNAME FORMAT OF THE PERFORMANCE GROUP DETAIL
+* //*   REPORTS WHERE NNN IS ANY NUMBER (001 - 999).
+* //*
+* //*   NOTE THAT A MAXIMUM OF 40 PERFORMANCE GROUPS ARE ALLOWED
+* //*
+* //PG001  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 1
+* //PG002  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 2
+* //PG003  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 3
+* //PG004  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 4
+* //PG005  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 5
+* //PG006  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 6
+* //PG007  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 7
+* //PG008  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 8
+* //PG009  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 9
+* //PG010  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 10
+* //PG011  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 11
+* //PG012  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 12
+* //PG013  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 13
+* //PG014  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 14
+* //PG015  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 15
+* //PG016  DD  SYSOUT=A   DETAIL RPT -    PERFORMANCE GROUP 16
+* //*
+* //       PEND
+* //MAPMP   EXEC  MAPMP,RMFDSN='SYS1.RMFDATA'
+* //*
+         TITLE 'RMFMAP -   RMF DATA REDUCTION PROGRAM'
+RMFMAP   CSECT
+         SAVE  (14,12)
+         LR    R3,R15
+         USING RMFMAP,R3
+         L     R15,BASE13
+         ST    R13,4(0,R15)
+         LR    R13,R15
+         USING SAVE,R13
+         B     PARM
+         SPACE 1
+BASE13   DC    A(SAVE)
+         EJECT
+PARM     L     R1,0(0,R1)          PARM ADDR
+         MVC   LINE(31),=31C'0'
+         MVZ   LINE(31),6(R1)
+         CLC   LINE(31),=31C'0'    VALID PARMS
+         BE    PARM1               YES, PROCESS
+         WTO   'RMFMAP ERROR -   INVALID PARAMETERS',                  X
+               ROUTCDE=(11)
+         ABEND 77
+         EJECT
+PARM1    MVC   SYSTEM(4),2(R1)     SYSTEM ID
+         PACK  DOUBLE(8),34(3,R1)  MIP RATE VALUE
+         CVB   R14,DOUBLE
+         ST    R14,MIPRATE
+         MVC   DEVSW(1),37(R1)     SAVE DEVICE SELECTION PARM
+         SPACE 1
+PARM2    MVC   TIMELO(4),16(R1)    LO ARGUMENT TIME
+         MVC   TIMEHI(4),20(R1)    HI ARGUMENT TIME
+         MVC   DATELO(5),24(R1)    LO ARGUMENT DATE
+         PACK  DATELO+8(4),DATELO(5)
+         MVC   DATEHI(5),29(R1)    HI ARGUMENT DATE
+         PACK  DATEHI+8(4),DATEHI(5)
+         MVC   DEVLINE+4(2),6(R1)  INTERVAL
+         MVC   SELLO(4),8(R1)      SELECTED AVG -   START TIME
+         MVC   SELHI(4),12(R1)     SELECTED AVG -   STOP TIME
+         LA    R1,OPENLIST         OPEN DCB LIST
+         OPEN  MF=(E,(1))
+         L     R4,16               CVT
+         L     R4,0(0,R4)          TCB WORDS
+         L     R4,4(0,R4)          CURRENT TCB
+         L     R4,12(0,R4)         TIOT
+         L     R15,=A(SMF)
+         LH    R15,40(0,R15)       TIOT OFFSET
+         LA    R15,0(R15,R4)       TIOT ENTRY ADDR
+         L     R15,12(0,R15)       JFCB ADDR
+         SRL   R15,8               RIGHT ADJUST JFCB ADDR
+         LA    R15,16(0,R15)          ADD INDEX TO DATA
+         MVC   DSNDSN(44),0(R15)   SMF DSN
+         MVC   DSNVOL(6),118(R15)  SMF VOL
+         LA    R4,24(0,R4)         DD ENTRIES
+         L     R6,=A(CHNLIST)      CHANNEL OUTPUT DCBS
+         L     R7,=A(DVNLIST)      DEVICE OUTPUT DCBS
+         L     R8,=A(PGNLIST)      PERF GROUP OUTPUT DCBS
+         SR    R5,R5
+         EJECT
+TIOTLOOP IC    R5,0(0,R4)          LOAD DD LENGTH
+         LTR   R5,R5               TIOT END
+         BZ    SMFBASE             YES, GO PROCESS SMF DATA
+         CLC   4(2,R4),=C'CH'      CHANNEL OUTPUT DD
+         BE    TIOTTRNS            YES, PROCESS
+         CLC   4(2,R4),=C'PG'      PERF GROUP OUTPUT DD
+         BE    TIOPG               YES, PROCESS
+         CLC   4(2,R4),=C'DV'      DEVICE OUTPUT DD
+         BE    TIODEV              YES, PROCESS
+         SPACE 1
+TIOTNEXT LA    R4,0(R4,R5)         NEXT DD ENTRY ADDR
+         CLC   0(4,R6),=F'0'       END OF ENTRIES
+         BNE   TIOTLOOP            NO, CHECK NEXT
+         CLC   0(4,R7),=F'0'       END OF DCBS
+         BNE   TIOTLOOP            NO, CHECK NEXT
+         CLC   0(4,R8),=F'0'       END OF DCBS
+         BE    SMFBASE             YES, GO PROCESS SMF DATA
+         B     TIOTLOOP            CHECK NEXT
+         SPACE 1
+TIOTTRNS CLC   0(4,R6),=F'0'       END OF DCBS
+         BE    TIOTNEXT
+         MVC   4(4,R6),6(R4)       MOVE CPU/CHAN ID
+         MVC   8(4,R6),6(R4)          TO HEX AND CHAR AREAS
+         TR    4(4,R6),CHTABLE     TRANSLATE DD ENTRY ID
+         MVC   K0000(4),=F'0'      TEST
+         MVZ   K0000(4),4(R6)         FOR VALID
+         CLC   K0000(4),=F'0'            TRANSLATE
+         BNE   TIOTERR             NO, ERROR
+         L     R2,0(0,R6)          LOAD DCB ADDR
+         MVC   42(4,R2),6(R4)      FILL IN DDNAME
+         OPEN  ((R2),(OUTPUT))
+         LA    R6,240(0,R6)        NEXT ENTRY
+         B     TIOTNEXT            GO CHECK NEXT
+         EJECT
+TIOPG    CLC   0(4,R8),=F'0'       END OF DCBS
+         BE    TIOTNEXT            YES, GO BACK
+         MVC   K0000(3),=3C'0'
+         MVZ   K0000(3),6(R4)
+         CLC   K0000(3),=3C'0'     NUMERIC PERF GROUP NO.
+         BNE   TIOTERR             NO, ERROR
+         L     R2,0(0,R8)          PERF GROUP DCB
+         MVC   5(3,R8),6(R4)       CHAR PERF GROUP
+         PACK  DOUBLE(8),6(3,R4)
+         CVB   R1,DOUBLE
+         STC   R1,4(0,R8)          BINARY PERF GROUP
+         MVC   42(3,R2),6(R4)      FILL IN DD NAME IN DCB
+         OPEN  ((R2),(OUTPUT))
+         LA    R8,1756(0,R8)       NEXT TABLE ENTRY
+         B     TIOTNEXT
+         SPACE 3
+TIODEV   CLC   0(4,R7),=F'0'       END OF DCBS
+         BE    TIOTNEXT            YES, GO BACK
+         CLI   8(R4),C' '          VALIDATE NAME
+         BNE   TIOTERR
+         MVC   4(2,R7),6(R4)       SAVE UNIT ID
+         L     R2,0(0,R7)          DCB ADDR
+         MVC   42(2,R2),6(R4)      FILL IN DDNAME
+         OPEN  ((R2),(OUTPUT))
+         LA    R7,12(0,R7)         NEXT ENTRY
+         B     TIOTNEXT
+         EJECT
+TIOTERR  MVC   TIOTWTO+42(8),4(R4)
+TIOTWTO  WTO   'RMFMAP ERROR -   INVALID DDNAME,  XXXXXXXX',           X
+               ROUTCDE=(11)
+         ABEND 77
+         EJECT
+         CNOP  0,8
+SMFBASE  LA    R3,SMFBASE
+         DROP  R3
+         USING SMFBASE,R3
+         LA    R9,4095(0,R3)
+         LA    R9,1(0,R9)
+         USING SMFBASE+4096,R9
+         SPACE 1
+SMFGET   L     R2,=A(SMF)
+         GET   (R2)
+         LA    R11,4(0,R1)         POINT TO RECORD
+         WTO   'GOT RECORD',ROUTCDE=(11)
+         SPACE 1
+SMFGET1  CLC   10(4,R11),SYSTEM    SID MATCH
+         BNE   SMFGET              NO, NEXT RECORD
+         CLC   6(4,R11),DATELO+8   DATE IN SPECIFIED RANGE
+**       BL    SMFGET              NO, NEXT RECORD
+         CLC   6(4,R11),DATEHI+8   DATE IN SPECIFIED RANGE
+**       BH    SMFGET              NO, NEXT RECORD
+         SPACE 1
+SMFBR    BC    15,SMFFIRST         1ST RECORD INFO EXTRACT
+         SPACE 1
+         UNPK  LINE(6),16(4,R11)   TIME
+         CLC   TIMELO(4),TIMEHI    TIME CROSSES MIDNIGHT
+         BH    SMFTIME             YES, REVERSE TIME CHECK
+         CLC   LINE(4),TIMELO      TIME IN SPECIFIED RANGE
+**       BL    SMFGET              NO, NEXT RECORD
+         CLC   LINE(4),TIMEHI      TIME IN SPECIFIED RANGE
+**       BH    SMFGET              NO, NEXT RECORD
+         SPACE 1
+SMFCONT  CLI   1(R11),70           CPU ACTIVITY RECORD
+         BE    CPUFORM             YES, PROCESS
+         BL    SMFGET              NOT RMF TYPE
+         CLI   1(R11),71           PAGING ACTIVITY RECORD
+         BE    PAGFORM             YES, PROCESS
+         CLI   1(R11),72           WORKLOAD ACTIVITY RECORD
+         BE    PGFORM              YES, PROCESS
+         CLI   1(R11),73           CHANNEL ACTIVITY RECORD
+         BE    CHFORM              YES, PROCESS
+         CLI   1(R11),74           DEVICE ACTIVITY RECORD
+         BE    DEVFORM             YES, PROCESS
+         CLI   1(R11),76           TRACE ACTIVITY RECORD
+         BE    TRFORM              YES, PROCESS
+         B     SMFGET              NOT RMF TYPE
+         EJECT
+SMFTIME  CLC   LINE(4),TIMELO      TIME IN SPECIFIED RANGE
+         BH    SMFCONT             YES
+         CLC   LINE(4),TIMEHI      TIME IN SPECIFIED RANGE
+         BL    SMFCONT             YES
+         B     SMFCONT             *************** DEBUG ********
+         B     SMFGET
+         SPACE 1
+SMFFIRST UNPK  DSNDATE(3),7(2,R11) YEARS
+         MVI   DSNDATE+2,C'.'
+         UNPK  DSNDATE+3(3),8(2,R11) DAYS
+         MVC   DSNSYS(4),10(R11)   SID
+         MVI   SMFBR+1,X'00'       TURN OFF BRANCH
+         B     SMFGET1
+         SPACE 3
+CPUFORM  BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'CPUFORM',ROUTCDE=(11)
+         L     R15,=A(INTERVAL)
+         BALR  R12,R15             GET RMF INTERVAL
+         LA    R10,LINE+6          1ST LINE AREA
+         ST    R15,SAMPINTV        SAVE RMF INTERVAL
+         LH    R4,50(0,R11)        LOAD NO. OF CPU SECTIONS
+         LA    R5,48(0,R11)        CPU CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST CPU DATA SECTION
+         SPACE 1
+CPUFORM1 TM    11(R5),X'01'        CPU ONLINE
+         BO    CPUFORM3            YES, GO PROCESS
+         SPACE 1
+CPUFORM2 LA    R5,16(0,R5)         NEXT CPU DATA SECTION
+         BCT   R4,CPUFORM1
+         SPACE 1
+CPUOUT   L     R10,=A(CPUHDR)      CPU HDR LINE
+         LA    R2,CPULINCT
+         L     R11,=A(CPU)         CPU OUTPUT DCB
+         BAL   R12,PRINT
+         B     SMFGET
+         SPACE 3
+PCTTOTL  SR    R14,R14
+         LR    R15,R1
+         D     R14,=F'5'           DIVIDE PERCENT/PAGES BY 5
+         SLL   R15,2               TABLE ADDRESS INCREMENT
+         LA    R15,4(R2,R15)       COUNT FIELD ADDRESS
+         L     R14,0(0,R15)
+         LA    R14,1(0,R14)        INCR COUNT
+         ST    R14,0(0,R15)           OF OCCURRENCES
+         L     R14,0(0,R2)         INCR
+         LA    R14,1(0,R14)           TOTAL
+         ST    R14,0(0,R2)               OCCURRENCES
+         BR    R12
+         EJECT
+CPUFORM3 EQU   *
+         WTO   'CPUFORM3',ROUTCDE=(11)
+         LH    R2,8(0,R5)          CPU ID
+         MH    R2,=H'64'           RELATIVE LINE POSITION
+         LA    R10,LINE+6(R2)      PRINT AREA ADDR
+         LM    R14,R15,0(R5)       LOAD WAIT TIME
+         SRDL  R14,12              WAIT TIME IN MICROSECS
+         LR    R8,R15              SAVE WAIT TIME
+         WTO   'CPU 001',ROUTCDE=(11)
+         D     R14,=F'10'          CONVERT TO MILLISECONDS X 100 PCT
+         WTO   'CPU 002',ROUTCDE=(11)
+         SR    R14,R14
+         WTO   'CPU 003',ROUTCDE=(11)
+         D     R14,SAMPINTV        DIVIDE WAIT TIME BY INTERVAL
+         WTO   'CPU 004',ROUTCDE=(11)
+         LA    R14,100
+         SR    R14,R15             BUSY TIME
+         BNP   CPUFORM2            BYPASS OCCASSIONAL BAD DATA 0C4
+         LH    R2,8(0,R5)          CPUID
+         SLL   R2,2                MULT BY 4
+         L     R1,CPUSMPA(R2)
+         LA    R1,1(0,R1)
+         ST    R1,CPUSMPA(R2)      ADD 1 TO AVG SAMPLES
+         LR    R1,R14
+         A     R1,CPUTOTA(R2)
+         ST    R1,CPUTOTA(R2)      ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,CPUSMP1(R2)
+         LA    R1,1(0,R1)
+         ST    R1,CPUSMP1(R2)      ADD 1 TO SEL SAMPLES
+         LR    R1,R14
+         A     R1,CPUTOT1(R2)
+         ST    R1,CPUTOT1(R2)      ADD TO SEL TOTAL
+         C     R14,CPUMIN(R2)
+         BNL   *+8
+         ST    R14,CPUMIN(R2)      SAVE MIN VALUE
+         C     R14,CPUMAX(R2)
+         BNH   *+8
+         ST    R14,CPUMAX(R2)      SAVE MAX VALUE
+         CVD   R14,DOUBLE
+         LTR   R2,R2               ONLY CPU0
+         BNZ   *+16
+         LR    R1,R14              SAVE PERCENT
+         L     R2,=A(CPUPCNT)      PERCENT ACCUMULATORS
+         BAL   R12,PCTTOTL
+         LR    R14,R1              RELOAD PERCENT
+         MVC   7(4,R10),=X'40212020'
+         ED    7(4,R10),DOUBLE+6
+         SRL   R14,1               DIVIDE BY 2
+         CH    R14,=H'50'          MAX
+         BNH   *+8
+         LH    R14,=H'50'          FORCE MAX
+         LA    R15,12(0,R10)
+         BAL   R12,ASTERISK        PROPAGATE ASTERISKS
+         SR    R14,R14
+         LR    R15,R8              RELOAD WAIT TIME
+         D     R14,=F'1000'        MILLISECONDS
+         SR    R14,R14
+         D     R14,=F'1000'        SECONDS AND MILLISECONDS
+         CVD   R14,DOUBLE
+         UNPK  4(3,R10),DOUBLE+6(2) FORMAT MILLISECONDS
+         OI    6(R10),X'F0'
+         SR    R14,R14
+         D     R14,=F'60'          MINUTES AND SECONDS
+         CVD   R14,DOUBLE
+         UNPK  2(2,R10),DOUBLE+6(2) FORMAT SECONDS
+         OI    3(R10),X'F0'
+         CVD   R15,DOUBLE
+         UNPK  0(2,R10),DOUBLE+6(2) FORMAT MINUTES
+         OI    1(R10),X'F0'
+         B     CPUFORM2
+         EJECT
+PAGFORM  BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'PAGFORM',ROUTCDE=(11)
+         L     R15,=A(INTERVAL)
+         BALR  R12,R15             GET RMF INTERVAL
+         SR    R14,R14
+         D     R14,=F'1000'        SECONDS IN INTERVAL
+         LA    R15,1(0,R15)
+         ST    R15,SAMPINTV        SAVE INTERVAL SECONDS
+         SPACE 1
+PAGFORM1 BC    15,PAGFORM2
+         LA    R10,LINE+5
+         LA    R2,4
+         L     R4,52(0,R11)        PVTNPIN
+         A     R4,56(0,R11)        PVTNPOUT
+         A     R4,68(0,R11)        PVTSPIN
+         A     R4,72(0,R11)        PVTSPOUT
+         A     R4,76(0,R11)        PVTVAMI
+         A     R4,80(0,R11)        PVTVAMO
+         LR    R5,R4               SAVE ACTUAL PAGING
+         BAL   R12,PAGEDIT         ACTUAL PAGING
+         L     R1,PAGPSEC          ACTUAL PAGING/SEC
+         L     R2,=A(PAGPCNT)
+         BAL   R12,PCTTOTL
+         LA    R10,LINE+30
+         LA    R2,16
+         L     R4,52(0,R11)        PVTNPIN
+         A     R4,56(0,R11)        PVTNPOUT
+         S     R4,88(0,R11)        PVTCAIN
+         S     R4,92(0,R11)        PVTCAOUT
+         BAL   R12,PAGEDIT         TOTAL ADDRESS SPACE
+         LA    R10,LINE+55
+         LA    R2,36
+         L     R4,88(0,R11)        PVTCAIN
+         A     R4,92(0,R11)        PVTCAOUT
+         BAL   R12,PAGEDIT         TOTAL COMMON
+         LA    R10,LINE+80
+         LA    R2,56
+         L     R4,76(0,R11)        PVTVAMI
+         A     R4,80(0,R11)        PVTVAMO
+         BAL   R12,PAGEDIT         TOTAL VIO
+         LA    R10,LINE+105
+         LA    R2,76
+         L     R4,68(0,R11)        PVTSPIN
+         A     R4,72(0,R11)        PVTSPOUT
+         BAL   R12,PAGEDIT         TOTAL SWAP
+         LA    R2,PAGLNCT1
+         L     R10,=A(PAGHDR1)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG1)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         LA    R10,LINE+5
+         SR    R2,R2
+         LR    R4,R5               LOAD ACTUAL PAGING
+         A     R4,60(0,R11)        PVTNPREC
+         A     R4,84(0,R11)        PVTVAMR
+         BAL   R12,PAGEDIT         TOTAL PAGING
+         LA    R10,LINE+30
+         LA    R2,8
+         L     R4,60(0,R11)        PVTNPREC
+         A     R4,84(0,R11)        PVTVAMR
+         BAL   R12,PAGEDIT         TOTAL RECLAIM
+         LA    R10,LINE+55
+         LA    R2,32
+         L     R4,60(0,R11)        PVTNPREC
+         S     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         ADDRSPC RECLAIM
+         LA    R10,LINE+80
+         LA    R2,52
+         L     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         COMMON RECLAIM
+         LA    R10,LINE+105
+         LA    R2,72
+         L     R4,84(0,R11)        PVTVAMR
+         BAL   R12,PAGEDIT         VIO RECLAIM
+         LA    R2,PAGLNCT2
+         L     R10,=A(PAGHDR2)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG2)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         LA    R10,LINE+5
+         LA    R2,92
+         L     R4,52(0,R11)        PVTNPIN
+         A     R4,56(0,R11)        PVTNPOUT
+         S     R4,88(0,R11)        PVTCAIN
+         S     R4,92(0,R11)        PVTCAOUT
+         LR    R5,R4               SAVE ACTUAL PAGING
+         A     R4,60(0,R11)        PVTNPREC
+         S     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         TOTAL ADDRESS SPACE
+         LA    R10,LINE+30
+         LA    R2,20
+         LR    R4,R5
+         BAL   R12,PAGEDIT         ACTUAL ADDRESS SPACE
+         LA    R10,LINE+55
+         LA    R2,24
+         L     R4,52(0,R11)        PVTNPIN
+         S     R4,88(0,R11)        PVTCAIN
+         BAL   R12,PAGEDIT         PAGEIN ADDRESS SPACE
+         LA    R10,LINE+80
+         LA    R2,28
+         L     R4,56(0,R11)        PVTNPOUT
+         S     R4,92(0,R11)        PVTCAOUT
+         BAL   R12,PAGEDIT         PAGEOUT ADDRESS SPACE
+         LA    R10,LINE+105
+         LA    R2,32
+         L     R4,60(0,R11)        PVTNPREC
+         S     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         RECLAIMS ADDRESS APACE
+         LA    R2,PAGLNCT3
+         L     R10,=A(PAGHDR3)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG3)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         LA    R10,LINE+5
+         LA    R2,92
+         L     R4,88(0,R11)        PVTCAIN
+         A     R4,92(0,R11)        PVTCAOUT
+         LR    R5,R4               SAVE ACTUAL COMMON
+         A     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         TOTAL COMMON
+         LA    R10,LINE+30
+         LA    R2,40
+         LR    R4,R5
+         BAL   R12,PAGEDIT         ACTUAL COMMON
+         LA    R10,LINE+55
+         LA    R2,44
+         L     R4,88(0,R11)        PVTCAIN
+         BAL   R12,PAGEDIT         PAGEIN COMMON
+         LA    R10,LINE+80
+         LA    R2,48
+         L     R4,92(0,R11)        PVTCAOUT
+         BAL   R12,PAGEDIT         PAGEOUT COMMON
+         LA    R10,LINE+105
+         LA    R2,52
+         L     R4,96(0,R11)        PVTCAREC
+         BAL   R12,PAGEDIT         RECLAIMS COMMON
+         LA    R2,PAGLNCT4
+         L     R10,=A(PAGHDR4)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG4)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         LA    R10,LINE+5
+         LA    R2,92
+         L     R4,76(0,R11)        PVTVAMI
+         A     R4,80(0,R11)        PVTVAMO
+         LR    R5,R4               SAVE ACTUAL VIO
+         A     R4,84(0,R11)        PVTVAMR
+         BAL   R12,PAGEDIT         TOTAL VIO
+         LA    R10,LINE+30
+         LA    R2,60
+         LR    R4,R5
+         BAL   R12,PAGEDIT         ACTUAL VIO
+         LA    R10,LINE+55
+         LA    R2,64
+         L     R4,76(0,R11)        PVTVAMI
+         BAL   R12,PAGEDIT         PAGEIN VIO
+         LA    R10,LINE+80
+         LA    R2,68
+         L     R4,80(0,R11)        PVTVAMO
+         BAL   R12,PAGEDIT         PAGEOUT VIO
+         LA    R10,LINE+105
+         LA    R2,72
+         L     R4,84(0,R11)        PVTVAMR
+         BAL   R12,PAGEDIT         RECLAIMS VIO
+         LA    R2,PAGLNCT5
+         L     R10,=A(PAGHDR5)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG5)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         LA    R10,LINE+5
+         LA    R2,92
+         L     R4,68(0,R11)        PVTSPIN
+         A     R4,72(0,R11)        PVTSPOUT
+         BAL   R12,PAGEDIT         TOTAL SWAP
+         LA    R10,LINE+30
+         LA    R2,80
+         L     R4,64(0,R11)        PVTNSWPS
+         BAL   R12,PAGEDIT         SWAP SEQUENCES
+         LA    R10,LINE+55
+         LA    R2,84
+         L     R4,68(0,R11)        PVTSPIN
+         BAL   R12,PAGEDIT         PAGEIN SWAP
+         LA    R10,LINE+80
+         LA    R2,88
+         L     R4,72(0,R11)        PVTSPOUT
+         BAL   R12,PAGEDIT         PAGEOUT SWAP
+         LA    R10,LINE+105
+         LA    R2,12
+         L     R4,52(0,R11)        PVTNPIN
+         A     R4,60(0,R11)        PVTNPREC
+         BAL   R12,PAGEDIT         PAGE FAULTS
+         LA    R2,PAGLNCT6
+         L     R10,=A(PAGHDR6)
+         LR    R6,R11              SAVE RECORD ADDR
+         L     R11,=A(PAG6)
+         BAL   R12,PRINT
+         LR    R11,R6              RELOAD RECORD ADDR
+         B     FRMFORM
+         EJECT
+PAGEDIT  SR    R14,R14
+         LR    R15,R4              LOAD PAGES
+         D     R14,SAMPINTV        DIVIDE BY SECONDS IN INTERVAL
+         LA    R1,1(0,R15)         SAVE
+         ST    R1,PAGPSEC             PAGES/SEC
+         CVD   R15,DOUBLE
+         MVC   0(4,R10),=X'40202120'
+         ED    0(4,R10),DOUBLE+6   FORMAT NO. OF PAGES/SEC
+         MVI   4(R10),C'.'
+         MH    R14,=H'10'          SET UP TENTHS
+         SRDL  R14,32
+         D     R14,SAMPINTV        CALCULATE TENTHS
+         CVD   R15,DOUBLE
+         UNPK  5(1,R10),DOUBLE+7(1)
+         OI    5(R10),X'F0'
+         LR    R14,R1              RELOAD PAGES/SEC
+         LTR   R4,R4               ZERO PAGES EXACTLY
+         BNZ   *+6                 LET IT SAY 1
+         SR    R14,R14             FORCE ZERO
+         L     R1,PAGSMPA(R2)
+         LA    R1,1(0,R1)
+         ST    R1,PAGSMPA(R2)      ADD 1 TO AVG SAMPLES
+         LR    R1,R14
+         A     R1,PAGTOTA(R2)
+         ST    R1,PAGTOTA(R2)      ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,PAGSMP1(R2)
+         LA    R1,1(0,R1)
+         ST    R1,PAGSMP1(R2)      ADD 1 TO SEL SAMPLES
+         LR    R1,R14
+         A     R1,PAGTOT1(R2)
+         ST    R1,PAGTOT1(R2)      ADD TO SEL TOTAL
+         C     R14,PAGMIN(R2)
+         BNL   *+8
+         ST    R14,PAGMIN(R2)      SAVE MIN VALUE
+         C     R14,PAGMAX(R2)
+         BNH   *+8
+         ST    R14,PAGMAX(R2)      SAVE MAX VALUE
+         LR    R4,R14              SAVE PAGES/SEC
+         SRL   R14,1               DIVIDE BY 2
+         CH    R14,=H'18'          MAX PRINT  (EQUAL TO 36 PAGES/SEC)
+         BNH   *+8                 NO, BYPASS MAX SET
+         LH    R14,=H'18'          SET MAX
+         LA    R15,7(0,R10)
+         LR    R6,R12              SAVE RETURN ADDR
+         BAL   R12,ASTERISK        PROPAGATE ASTERISKS
+         LR    R12,R6              RESTORE RETURN ADDR
+         BR    R12
+         EJECT
+PAGFORM2 MVI   PAGFORM1+1,X'00'
+         MVC   LINE(4),LINE+10     CLEAR TIME
+         MVC   LINE+10(14),=CL14'RMF INTERVAL -'
+         MVC   LINE+26(2),DEVLINE+4
+         MVC   LINE+29(3),=CL3'MIN'
+         MVC   LINE+36(11),=CL11'RMF CYCLE -'
+         UNPK  LINE+50(4),45(3,R11)
+         OI    LINE+53,X'F0'
+         MVC   LINE+49(1),LINE+50
+         MVI   LINE+50,C'.'
+         MVC   LINE+55(3),=CL3'SEC'
+         MVC   LINE+62(13),=CL13'SEL AVERAGE -'
+         MVC   LINE+77(4),SELLO
+         MVI   LINE+81,C'-'
+         MVC   LINE+82(4),SELHI
+         MVC   LINE+90(7),=CL7'DATES -'
+         MVC   LINE+99(5),DATELO
+         MVI   LINE+104,C'-'
+         MVC   LINE+105(5),DATEHI
+         MVC   LINE+114(7),=CL7'TIMES -'
+         MVC   LINE+123(4),TIMELO
+         MVI   LINE+127,C'-'
+         MVC   LINE+128(4),TIMEHI
+         LA    R2,MAPLNCT1
+         L     R10,=A(MAPHDR)
+         LR    R6,R11
+         L     R11,=A(MAP1)
+         MVI   AREA,X'11'
+         BAL   R12,PRINT
+         MVI   AREA,X'09'
+         LR    R11,R6
+         BAL   R12,TIME            GO SET UP PRINT LINE
+         B     PAGFORM1
+         EJECT
+FRMFORM  BAL   R12,TIME            SET UP PRINT LINE
+         LA    R5,FRAMTAB          FRAME COUNTS INCR TABLE
+         LA    R4,4                GROUPS/LINE
+         LA    R6,LINE+19          LINE BEGIN
+         LA    R7,2                NO. OF LINES
+         MVC   LINE+8(8),=CL8'PAGEABLE'
+         SR    R2,R2
+         SPACE 1
+FRMFORM1 L     R15,0(0,R5)         COUNT FIELD INCR
+         LA    R15,0(R15,R11)      START OF COUNT FIELDS
+         MVC   0(7,R6),=X'4020206B202120'
+         MVC   9(7,R6),=X'4020206B202120'
+         MVC   18(7,R6),=X'4020206B202120'
+         L     R14,0(0,R15)        MINIMUM
+         C     R14,FRMMIN(R2)
+         BNL   *+8
+         ST    R14,FRMMIN(R2)      SAVE MIN VALUE
+         CVD   R14,DOUBLE
+         ED    0(7,R6),DOUBLE+5
+         L     R14,4(0,R15)        MAXIMUM
+         C     R14,FRMMAX(R2)
+         BNH   *+8
+         ST    R14,FRMMAX(R2)      SAVE MAX VALUE
+         CVD   R14,DOUBLE
+         ED    9(7,R6),DOUBLE+5
+         L     R14,8(0,R15)        AVERAGE
+         L     R1,FRMSMPA(R2)
+         LA    R1,1(0,R1)
+         ST    R1,FRMSMPA(R2)      ADD 1 TO AVG SAMPLES
+         LR    R1,R14
+         A     R1,FRMTOTA(R2)
+         ST    R1,FRMTOTA(R2)      ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,FRMSMP1(R2)
+         LA    R1,1(0,R1)
+         ST    R1,FRMSMP1(R2)      ADD 1 TO SEL SAMPLES
+         LR    R1,R14
+         A     R1,FRMTOT1(R2)
+         ST    R1,FRMTOT1(R2)      ADD TO SEL TOTAL
+         LA    R2,4(0,R2)          NEXT GROUP
+         CVD   R14,DOUBLE
+         ED    18(7,R6),DOUBLE+5
+         LA    R5,4(0,R5)          NEXT INCR
+         LA    R6,29(0,R6)
+         BCT   R4,FRMFORM1
+         LA    R4,4                SET UP NEXT PASS
+         LA    R6,LINE+19
+         LA    R2,FRMLINCT         FRAME LINE COUNT
+         L     R10,=A(FRMHDR)      FRAME OUTPUT HDR
+         LR    R8,R11              SAVE RECORD ADDR
+         L     R11,=A(FRAME)       FRAME OUTPUT DCB
+         BAL   R12,PRINT
+         LR    R11,R8              RELOAD RECORD ADDR
+         MVC   LINE+8(8),=CL8'FIXED'
+         LA    R2,16               FIXED TOTALS INCR
+         BCT   R7,FRMFORM1         GO FORMAT 2ND LINE
+         EJECT
+SWPFORM  BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'SWPFORM',ROUTCDE=(11)
+         LA    R5,SWAPTAB          SWAP COUNTS INCR TABLE
+         LA    R4,10               NUMBER OF SWAP COUNT FIELDS
+         LA    R6,LINE+6
+         LA    R7,2                NO. OF PASSES
+         SR    R2,R2
+         SPACE 1
+SWPFORM1 L     R15,0(0,R5)         LOAD INCR
+         L     R15,0(R15,R11)      LOAD APPROPRIATE SWAP COUNT
+         L     R1,SWPSMPA(R2)
+         LA    R1,1(0,R1)
+         ST    R1,SWPSMPA(R2)      ADD 1 TO AVG SAMPLES
+         LR    R1,R15
+         A     R1,SWPTOTA(R2)
+         ST    R1,SWPTOTA(R2)      ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,SWPSMP1(R2)
+         LA    R1,1(0,R1)
+         ST    R1,SWPSMP1(R2)      ADD 1 TO SEL SAMPLES
+         LR    R1,R15
+         A     R1,SWPTOT1(R2)
+         ST    R1,SWPTOT1(R2)      ADD TO SEL TOTAL
+         C     R15,SWPMIN(R2)
+         BNL   *+8
+         ST    R15,SWPMIN(R2)      SAVE MIN VALUE
+         C     R15,SWPMAX(R2)
+         BNH   *+8
+         ST    R15,SWPMAX(R2)      SAVE MAX VALUE
+         LA    R2,4(0,R2)          NEXT GROUP
+         CVD   R15,DOUBLE
+         SR    R14,R14
+         MVC   EDIT(6),=X'402020202120'
+         ED    EDIT(6),DOUBLE+5
+         MVC   0(5,R6),EDIT+1
+         D     R14,SAMPINTV        SWAPS/SECOND
+         CVD   R15,DOUBLE
+         UNPK  6(1,R6),DOUBLE+7(1)
+         OI    6(R6),X'F0'
+         MVI   7(R6),C'.'
+         SRDL  R14,32
+         M     R14,=F'100'
+         D     R14,SAMPINTV        SWAPS/HUNDREDTHS OF SECS
+         CVD   R15,DOUBLE
+         UNPK  8(2,R6),DOUBLE+6(2)
+         OI    9(R6),X'F0'
+         LA    R6,10(0,R6)         NEXT LINE POSITION
+         LA    R5,4(0,R5)          NEXT INCR
+         BCT   R4,SWPFORM1
+         LA    R6,3(0,R6)
+         LA    R4,1                ALLOW 1 MORE PASS
+         BCT   R7,SWPFORM1         DO TOTALS
+         SR    R14,R14
+         L     R15,68(0,R11)       PAGES SWAPPED IN
+         LTR   R15,R15             ZERO SWAPS
+         BZ    *+8                 YES, BYPASS 0C9
+         D     R14,64(0,R11)       PAGES/SWAPIN
+         CVD   R15,DOUBLE
+         MVC   0(4,R6),=X'40202120'
+         ED    0(4,R6),DOUBLE+6
+         LA    R6,6(0,R6)
+         SR    R14,R14
+         L     R15,72(0,R11)       PAGES SWAPPED OUT
+         LTR   R15,R15             ZERO SWAPS
+         BZ    *+8                 YES, BYPASS 0C9
+         D     R14,64(0,R11)       PAGES/SWAPOUT
+         CVD   R15,DOUBLE
+         MVC   0(4,R6),=X'40202120'
+         ED    0(4,R6),DOUBLE+6
+         LA    R2,SWPLINCT
+         L     R10,=A(SWPHDR)
+         L     R11,=A(SWAP)
+         BAL   R12,PRINT
+         B     SMFGET
+         EJECT
+CHFORM   BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'CHFORM',ROUTCDE=(11)
+         L     R8,=A(CHNLIST)      LOAD CHANNEL OUTPUT DCB LIST
+         MVC   SAMPINTV(4),32(R11) SAVE NO. OF SAMPLES
+         SPACE 1
+CHFORM0  BC    15,CHFORM6
+         CLC   8(4,R8),=F'0'       END OF ACTIVE DCBS
+         BE    SMFGET              YES, NEXT SMF RECORD
+         LH    R4,50(0,R11)        LOAD NO. OF CHANNEL SECTIONS
+         LA    R5,48(0,R11)        CHANNEL CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST CHANNEL DATA SECTION
+         SPACE 1
+CHFORM1  TM    3(R5),X'01'         CHANNEL ONLINE
+         BO    CHFORM3             YES, GO PROCESS
+         SPACE 1
+CHFORM2  LA    R5,16(0,R5)         NEXT CHANNEL DATA SECTION
+         BCT   R4,CHFORM1
+         B     CHNEXT
+         SPACE 1
+CHFORM3  LA    R10,LINE+4          1ST LINE AREA
+         SR    R2,R2
+         CLC   4(2,R8),1(R5)       CPU/CHANNEL MATCH
+         BE    CHFORM4
+         CLC   6(2,R8),1(R5)       CPU/CHANNEL MATCH
+         BNE   CHFORM2             NO MATCH, TRY NEXT
+         LA    R10,LINE+68         2ND LINE AREA
+         LA    R2,4
+         EJECT
+CHFORM4  L     R14,4(0,R5)         SIO COUNT
+         CVD   R14,DOUBLE
+         MVC   0(9,R10),=X'40202020206B202120'
+         ED    0(9,R10),DOUBLE+4
+         L     R15,8(0,R5)         BUSY COUNT
+         MVC   11(5,R10),=C'00/00'
+         LTR   R15,R15             ANY BUSY COUNT
+         BZ    CHFORM5             NO, BYPASS CALCULATION
+         SR    R14,R14
+         L     R15,12(0,R5)        CONCURRENCY COUNT
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        PERCENT BUSY AND CPU WAIT
+         LTR   R15,R15             ADJUST CONCURRENCY COUNT UNLESS ZERO
+         BZ    *+8
+         LA    R15,1(0,R15)
+         CVD   R15,DOUBLE
+         UNPK  14(2,R10),DOUBLE+6(2)
+         OI    15(R10),X'F0'
+         SR    R14,R14
+         L     R15,8(0,R5)         BUSY COUNT
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        PERCENT BUSY
+         LA    R15,1(0,R15)        ADJUST UP
+         CVD   R15,DOUBLE
+         UNPK  11(2,R10),DOUBLE+6(2) FORMAT PERCENT BUSY
+         OI    12(R10),X'F0'
+         LR    R14,R15             LOAD PERCENT BUSY
+         L     R1,CHNSMPA(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,CHNSMPA(R2,R8)   ADD 1 TO AVG SAMPLES
+         LR    R1,R14
+         A     R1,CHNTOTA(R2,R8)
+         ST    R1,CHNTOTA(R2,R8)   ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,CHNSMP1(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,CHNSMP1(R2,R8)   ADD 1 TO SEL SAMPLES
+         LR    R1,R14
+         A     R1,CHNTOT1(R2,R8)
+         ST    R1,CHNTOT1(R2,R8)   ADD TO SEL TOTAL
+         C     R14,CHNMIN(R2,R8)
+         BNL   *+8
+         ST    R14,CHNMIN(R2,R8)   SAVE MIN VALUE
+         C     R14,CHNMAX(R2,R8)
+         BNH   *+8
+         ST    R14,CHNMAX(R2,R8)   SAVE MAX VALUE
+         LR    R1,R14              LOAD PERCENT
+         MH    R2,=H'22'           CPU0 OR CPU1 CH OFFSET
+         LA    R2,CHNPCNT(R2,R8)   PERCENT ACCUMULATORS
+         BAL   R12,PCTTOTL
+         LR    R14,R1
+         SRL   R14,1               DIVIDE BY 2
+         CH    R14,=H'47'          MAX
+         BNH   *+8
+         LH    R14,=H'47'          FORCE MAX
+         LA    R15,17(0,R10)
+         BAL   R12,ASTERISK        PROPAGATE ASTERISKS
+         SPACE 3
+CHFORM5  CLI   LINE+15,C' '        IS LINE PART EMPTY
+         BE    CHFORM2             YES, GO FILL
+         CLI   LINE+79,C' '        IS LINE PART EMPTY
+         BE    CHFORM2             YES, GO FILL
+         SPACE 3
+CHPRINT  LA    R10,CHNHDR          CHANNEL HDR
+         LR    R4,R11              SAVE RECORD ADDR
+         LA    R2,12(0,R8)         LOAD LINE COUNT ADDR
+         L     R11,0(0,R8)         CHANNEL OUTPUT DCB
+         MVC   CHNCPUA(1),8(R8)    FILL
+         MVC   CHNCHNA(1),9(R8)       IN
+         MVC   CHNCPUB(1),10(R8)         HDR
+         MVC   CHNCHNB(1),11(R8)            LINE
+         BAL   R12,PRINT
+         B     CHNEXT1
+         SPACE 1
+CHNEXT   LR    R4,R11              SAVE RECORD ADDR
+         CLI   LINE+15,C' '        IS LINE PART FULL
+         BNE   CHPRINT             YES, GO PRINT
+         CLI   LINE+79,C' '        IS LINE PART FULL
+         BNE   CHPRINT             YES, GO PRINT
+         SPACE 1
+CHNEXT1  LA    R8,240(0,R8)        NEXT DCB
+         LR    R11,R4              RESTORE RECORD ADDR
+         B     CHFORM0
+         EJECT
+CHFORM6  MVI   CHFORM0+1,X'00'
+         MVC   LINE(4),LINE+10
+         LH    R4,50(0,R11)        NO. OF CHANNEL SECTIONS
+         LA    R5,48(0,R11)        CHANNEL CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST CHANNEL DATA SECTION
+         LR    R6,R11              SAVE RECORD ADDR
+         SPACE 1
+CHFORM6A LH    R15,0(0,R5)         CPUID
+         CVD   R15,DOUBLE
+         MVC   LINE+10(4),=CL4'CPU'
+         UNPK  LINE+14(1),DOUBLE+7(1)
+         OI    LINE+14,X'F0'
+         MVC   LINE+18(8),=CL8'CHANNEL'
+         SR    R15,R15
+         IC    R15,2(0,R5)         CHANNEL ID
+         CH    R15,=H'10'          CHANNEL A-F
+         BNL   CHFORM6B            YES
+         LA    R15,57(0,R15)
+         SPACE 1
+CHFORM6B LA    R15,183(0,R15)      TRANSLATE CHANNEL ID
+         STC   R15,LINE+26
+         MVC   LINE+35(16),=CL16'BLOCK MULTIPLEX'
+         TM    3(R5),X'20'         BLOCK MULTPLX CHANNEL
+         BO    CHFORM6C            YES
+         MVC   LINE+35(16),=CL16'BYTE MULTIPLEX'
+         TM    3(R5),X'10'         BYTE MULTIPLEX CHANNEL
+         BO    CHFORM6C            YES
+         MVC   LINE+35(16),=CL16'SELECTOR'
+         SPACE 1
+CHFORM6C L     R10,=A(MAPHDR)
+         LA    R2,CHCLINCT
+         L     R11,=A(CLIST)
+         BAL   R12,PRINT
+         LA    R5,16(0,R5)         NECT SECTION
+         BCT   R4,CHFORM6A
+         LR    R11,R6              RELOAD RECORD ADDR
+         BAL   R12,TIME
+         B     CHFORM0
+         EJECT
+DEVFORM  BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'DEVFORM',ROUTCDE=(11)
+         MVC   SAMPINTV(4),32(R11) SAVE NUMBER OF SAMPLES
+         SPACE 1
+DEVFORM0 BC    15,DEVFORM6
+         LH    R4,50(0,R11)        LOAD NO. OF DEVICE SECTIONS
+         LA    R5,48(0,R11)        DEVICE CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST DEVICE DATA SECTION
+         SPACE 1
+DEVFORM1 TM    3(R5),X'01'         DEVICE ONLINE
+         BO    DEVFORM3            YES, PROCESS
+         SPACE 1
+DEVFORM2 AH    R5,DEVSIZE          NEXT DEVICE SECTION
+         BCT   R4,DEVFORM1
+         B     SMFGET
+         SPACE 1
+DEVFORM3 L     R1,16(0,R5)         I/O COUNT
+         C     R1,SAMPINTV         MIN COUNT EQUAL SAMPLE COUNT
+         BL    DEVFORM2            NO, TRY NEXT
+         L     R8,=A(DVSLIST)      DEVICE TOTALS LIST
+         SR    R6,R6
+         L     R7,24(0,R5)         NO. OF QUEUED REQUESTS
+         MH    R7,=H'100'
+         D     R6,SAMPINTV         AVG. REQUESTS X 100
+         SR    R14,R14
+         L     R15,20(0,R5)        NO. OF BUSY SAMPLES
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        PERCENT BUSY
+         ST    R7,DEVQUE
+         ST    R15,DEVBUSY
+         CLI   DEVSW,C'A'          ALL DEVICES REQUESTED
+         BE    DEVFORM4            YES
+         CH    R7,=H'10'           AT LEAST .10 QUEUED REQUESTS
+         BNL   DEVFORM4            YES, PROCESS
+         CH    R15,=H'30'          AT LEAST 30 PERCENT BUSY
+         BL    DEVFORM2            NO, TRY NEXT
+         EJECT
+DEVFORM4 UNPK  LINE+6(5),0(3,R5)   UNIT NAME
+         MVI   LINE+9,C' '
+         MVI   LINE+10,C' '
+         NC    LINE+6(3),=3X'0F'
+         TR    LINE+6(3),=C'0123456789ABCDEF'
+         UNPK  LINE+11(3),15(2,R5)  LOGICAL CHANNEL NUMBER
+         MVI   LINE+11,C' '
+         MVI   LINE+13,C' '
+         NI    LINE+12,X'0F'
+         TR    LINE+12(1),=C'0123456789ABCDEF'
+         MVC   LINE+16(6),8(R5)    VOLSER
+         SPACE 1
+DEVFORMA CLI   0(R8),C' '          EMPTY SLOT
+         BNE   DEVFORMB            NO, MATCH IT
+         MVC   0(3,R8),LINE+6      UNIT NAME
+         MVC   3(6,R8),LINE+16     VOLSER
+         B     DEVFORMD            GO PROCESS
+         SPACE 1
+DEVFORMB CLI   0(R8),X'FF'         END OF SLOTS
+         BE    DEVFORMD            YES, CONTINUE PROCESS
+         CLC   0(3,R8),LINE+6      UNIT MATCH
+         BNE   DEVFORMC            NO, TRY NEXT
+         CLC   3(6,R8),LINE+16     VOLSER MATCH
+         BE    DEVFORMD            YES, GO PROCESS
+         SPACE 1
+DEVFORMC LA    R8,108(0,R8)        NEXT SLOT
+         B     DEVFORMA
+         SPACE 1
+DEVFORMD L     R1,16(0,R5)         I/O COUNT
+         CVD   R1,DOUBLE
+         MVC   LINE+24(10),=X'40206B2020206B202120'
+         ED    LINE+24(10),DOUBLE+4
+         LH    R14,10(0,R8)        OCCURRENCE COUNT
+         LA    R14,1(0,R14)
+         STH   R14,10(0,R8)
+         SR    R14,R14
+         L     R15,20(0,R5)        DEVICE BUSY
+         MH    R15,=H'100'
+         D     R14,SAMPINTV
+         CVD   R15,DOUBLE          PERCENT BUSY
+         LA    R2,4
+         BAL   R12,DVTOTL1
+         MVC   LINE+89(5),=X'402120204B'
+         ED    LINE+89(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        HUNDREDTHS OF PERCENT BUSY
+         CVD   R15,DOUBLE
+         UNPK  LINE+94(2),DOUBLE+6(2)
+         OI    LINE+95,X'F0'
+         SR    R14,R14
+         L     R15,40(0,R5)        CU BUSY
+         MH    R15,=H'100'
+         D     R14,SAMPINTV
+         CVD   R15,DOUBLE          PERCENT BUSY
+         MVC   LINE+100(5),=X'402120204B'
+         ED    LINE+100(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        HUNDREDTHS OF PERCENT BUSY
+         CVD   R15,DOUBLE
+         UNPK  LINE+105(2),DOUBLE+6(2)
+         OI    LINE+106,X'F0'
+         SR    R14,R14
+         L     R15,80(0,R5)        RESV DELAY
+         MH    R15,=H'100'
+         D     R14,SAMPINTV
+         CVD   R15,DOUBLE          PERCENT
+         MVC   LINE+112(5),=X'402120204B'
+         ED    LINE+112(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        HUNDREDTHS OF PERCENT
+         CVD   R15,DOUBLE
+         UNPK  LINE+117(2),DOUBLE+6(2)
+         OI    LINE+118,X'F0'
+         SR    R14,R14
+         L     R15,72(0,R5)        DEV RESV
+         MH    R15,=H'100'
+         D     R14,SAMPINTV
+         CVD   R15,DOUBLE          PERCENT
+         MVC   LINE+124(5),=X'402120204B'
+         ED    LINE+124(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        HUNDREDTHS OF PERCENT
+         CVD   R15,DOUBLE
+         UNPK  LINE+129(2),DOUBLE+6(2)
+         OI    LINE+130,X'F0'
+         SR    R14,R14
+         L     R15,48(0,R5)        DATA SETS OPEN
+         D     R14,SAMPINTV
+         CVD   R15,DOUBLE          AVG OPEN
+         MVC   LINE+80(5),=X'402120204B'
+         ED    LINE+80(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         D     R14,SAMPINTV        HUNDREDTHS OPEN
+         CVD   R15,DOUBLE
+         UNPK  LINE+85(2),DOUBLE+6(2)
+         OI    LINE+86,X'F0'
+         SR    R14,R14
+         L     R15,44(0,R5)        DEFERRED BY DEV BUSY
+         MH    R15,=H'100'
+         LTR   R15,R15             DO NOT DIVIDE WITH ZEROS
+         BZ    *+8
+         D     R14,24(0,R5)
+         CVD   R15,DOUBLE          PERCENT DEFERRED
+         MVC   LINE+62(5),=X'402120204B'
+         ED    LINE+62(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         LTR   R15,R15             DO NOT DIVIDE WITH ZEROS
+         BZ    *+8
+         D     R14,24(0,R5)        HUNDREDTHS OF PERCENT DEFERRED
+         CVD   R15,DOUBLE
+         UNPK  LINE+67(2),DOUBLE+6(2)
+         OI    LINE+68,X'F0'
+         SR    R14,R14
+         L     R15,24(0,R5)        TOTAL DEFERRED
+         S     R15,44(0,R5)        DEFERRED BY CU BUSY
+         MH    R15,=H'100'
+         LTR   R15,R15             DO NOT DIVIDE WITH ZEROS
+         BZ    *+8
+         D     R14,24(0,R5)
+         CVD   R15,DOUBLE          PERCENT BUSY
+         MVC   LINE+71(5),=X'402120204B'
+         ED    LINE+71(4),DOUBLE+6
+         SRDL  R14,32
+         MH    R15,=H'100'
+         LTR   R15,R15             DO NOT DIVIDE WITH ZEROS
+         BZ    *+8
+         D     R14,24(0,R5)        HUNDREDTHS OF PERCENT BUSY
+         CVD   R15,DOUBLE
+         UNPK  LINE+76(2),DOUBLE+6(2)
+         OI    LINE+77,X'F0'
+         LA    R2,8
+         LR    R15,R7              QLENGTH X 100
+         BAL   R12,DVTOTL1
+         SR    R6,R6
+         LR    R2,R7               SAVE QLENGTH X 100
+         D     R6,=F'100'          QLENGTH AND HUNDREDTHS
+         CVD   R7,DOUBLE
+         MVC   LINE+53(5),=X'402021204B'
+         ED    LINE+53(4),DOUBLE+6
+         CVD   R6,DOUBLE
+         UNPK  LINE+58(2),DOUBLE+6(2)
+         OI    LINE+59,X'F0'
+         SR    R14,R14
+         L     R15,16(0,R5)        I/O COUNT
+         SR    R6,R6
+         LR    R7,R2               LOAD QLENGTH X 100
+         MH    R7,=H'100'
+         SR    R2,R2
+         BAL   R12,DVTOTL
+         SR    R14,R14
+         L     R15,16(0,R5)        I/O COUNT
+         D     R14,SAMPINTV        I/O PER SAMPLE
+         LR    R2,R15              LOAD REQ/SAMPLE
+         MH    R2,=H'100'
+         CVD   R15,DOUBLE
+         MVC   LINE+36(5),=X'402021204B'
+         ED    LINE+36(4),DOUBLE+6
+         MH    R14,=H'100'
+         SRDL  R14,32
+         D     R14,SAMPINTV        HUNDREDTHS OF I/O COUNT PER SAMPLE
+         AR    R2,R15              ADD HUNDREDTHS
+         CVD   R15,DOUBLE
+         UNPK  LINE+41(2),DOUBLE+6(2)
+         OI    LINE+42,X'F0'
+         SR    R14,R14
+         L     R15,DEVBUSY         LOAD PERCENT BUSY
+         A     R15,DEVQUE          ADD QLENGTH
+         M     R14,=F'10'          SET TO MICROSECONDS
+         M     R14,SAMPINTV        MULTIPLY BY RMF INTERVAL
+         D     R14,16(0,R5)        DIVIDE BY SIO COUNT
+         CVD   R15,DOUBLE          AVG TIME TO SERVICE REQUEST
+         LA    R2,12
+         BAL   R12,DVTOTL1
+         MVC   LINE+44(7),=X'4020206B202120'
+         ED    LINE+44(7),DOUBLE+5
+         MVC   DEVLINE(4),LINE     SAVE TIME FOR DEVNAME OUTPUT
+         MVC   DEVLINE+6(2),LINE+7 SAVE UNIT NAME FOR DEVNAME OUTPUT
+         L     R2,=A(DEVNAME)
+         PUT   (R2),DEVLINE
+         L     R10,=A(DEVHDR)
+         L     R11,=A(DVNLIST-12)  DEVICE OUTPUT DCB LIST
+         EJECT
+DEVFORM5 LA    R11,12(0,R11)       NEXT DEVICE ENTRY
+         CLI   4(R11),X'00'        END OF ACTIVE ENTRIES
+         BE    DEVFORM2            YES, DONT PRINT
+         CLC   4(2,R11),LINE+6     DEVICE ID MATCH
+         BNE   DEVFORM5            NO, NEXT
+         LA    R2,8(0,R11)         LINE COUNT
+         L     R11,0(0,R11)        DCB ADDR
+         BAL   R12,PRINT
+         B     DEVFORM2
+         SPACE 1
+DEVFORM6 MVI   DEVFORM0+1,X'00'
+         MVC   DEVSIZE(2),52(R11)  SAVE DEVICE DATA SECTION SIZE
+         MVC   LINE(4),LINE+10
+         LH    R4,50(0,R11)        NO OF DEVICE SECTIONS
+         LA    R5,48(0,R11)        DEVICE CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST DEVICE DATA SECTION
+         LR    R6,R11              SAVE RECORD ADDR
+         SPACE 1
+DEVFORM7 MVC   LINE+10(6),=CL6'UNIT='
+         UNPK  LINE+16(5),0(3,R5)
+         MVI   LINE+19,C' '
+         MVI   LINE+20,C' '
+         NC    LINE+16(3),=8X'0F'
+         TR    LINE+16(3),=C'0123456789ABCDEF'
+         MVC   LINE+24(4),=CL4'VOL='
+         MVC   LINE+29(6),8(R5)
+         MVC   LINE+40(8),=CL8'DEVTYPE='
+         UNPK  LINE+49(9),4(5,R5)
+         MVI   LINE+57,C' '
+         NC    LINE+49(8),=8X'0F'
+         TR    LINE+49(8),=C'0123456789ABCDEF'
+         L     R10,=A(MAPHDR)
+         LA    R2,DVCLINCT
+         L     R11,=A(DLIST)
+         BAL   R12,PRINT
+         AH    R5,DEVSIZE          NEXT SECTION
+         BCT   R4,DEVFORM7
+         LR    R11,R6              RELOAD RECORD ADDR
+         BAL   R12,TIME
+         B     DEVFORM0
+         EJECT
+DVTOTL   SR    R14,R14
+         D     R14,=F'1000'        DIVIDE LARGE VALUES BY 1000
+         LA    R15,1(0,R15)        ROUND UP
+         SPACE 1
+DVTOTL1  L     R1,DVSSMPA(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,DVSSMPA(R2,R8)   ADD 1 TO AVG SAMPLES
+         LR    R1,R15
+         A     R1,DVSTOTA(R2,R8)
+         ST    R1,DVSTOTA(R2,R8)   ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,DVSSMP1(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,DVSSMP1(R2,R8)   ADD 1 TO SEL SAMPLES
+         LR    R1,R15
+         A     R1,DVSTOT1(R2,R8)
+         ST    R1,DVSTOT1(R2,R8)   ADD TO SEL TOTAL
+         C     R15,DVSMIN(R2,R8)
+         BNL   *+8
+         ST    R15,DVSMIN(R2,R8)   SAVE MIN VALUE
+         C     R15,DVSMAX(R2,R8)
+         BNH   *+8
+         ST    R15,DVSMAX(R2,R8)   SAVE MAX VALUE
+         BR    R12
+         EJECT
+PGFORM   BAL   R12,TIME            SET UP PRINT LINE
+         WTO   'PGFORM',ROUTCDE=(11)
+         L     R8,=A(PGNLIST)      LOAD PERF GROUP OUTPUT DCBLIST
+         L     R15,=A(INTERVAL)
+         BALR  R12,R15             GET RMF INTERVAL
+         LA    R15,500(0,R15)      ROUND UP MILLISECS
+         SR    R14,R14
+         D     R14,=F'1000'
+         ST    R15,SAMPINTV        SAVE INTERVAL SECONDS
+         SPACE 1
+PGFORM1  BC    15,PGFORM6
+         CLI   4(R8),X'00'         END OF ACTIVE DCBS
+         BE    SMFGET              YES, NEXT SMF RECORD
+         CLC   4(1,R8),31(R11)     PERF GROUP MATCH
+         BE    PGFORM2             YES, GO PROCESS
+         LA    R8,1756(0,R8)        NEXT DCB ENTRY
+         B     PGFORM1
+         SPACE 1
+PGFORM2  LH    R4,50(0,R11)        NO. OF PERIODS
+         LA    R5,48(0,R11)        WORKLOAD CONTROL SECTION ADDR
+         AH    R5,0(0,R5)          1ST PERIOD DATA SECTION
+         MVC   LINE+6(2),62(R11)   CURRENT IPS TO PRINT
+         XC    PERIOD(4),PERIOD
+         CLC   8(4,R5),=F'0'       ZERO SERVICE
+         BE    SMFGET              YES, DONT PROCESS
+         CH    R4,=H'1'            ONLY ONE PERIOD
+         BE    *+10                YES, NO ALL TOTALS
+         MVC   1452(4,R8),=X'AAAAAAAA'
+         EJECT
+PGFORM3  L     R6,PERIOD
+         LA    R6,1(0,R6)          PERIOD NUMBER
+         ST    R6,PERIOD
+         ST    R6,PERSAV
+         CVD   R6,DOUBLE
+         MVC   LINE+9(3),5(R8)     PERF GROUP NUMBER
+         MVI   LINE+12,C'-'
+         UNPK  LINE+13(1),DOUBLE+7(1)   PERIOD NUMBER
+         OI    LINE+13,X'F0'
+         CLC   8(4,R5),=F'0'       2ND PERIOD ZERO SERVICE
+         BE    PGFORM5             YES, SAY ZEROS
+         MVC   LINE+15(10),=X'40206B2020206B202120'
+         MVC   LINE+26(10),=X'40206B2020206B202120'
+         MVC   LINE+37(10),=X'40206B2020206B202120'
+         MVC   LINE+48(10),=X'40206B2020206B202120'
+         L     R15,24(0,R5)        IOC SERVICE
+         CVD   R15,DOUBLE
+         SR    R2,R2
+         BAL   R12,PGTOTL
+         ED    LINE+15(10),DOUBLE+4
+         L     R15,28(0,R5)        CPU SERVICE
+         CVD   R15,DOUBLE
+         LA    R2,4
+         BAL   R12,PGTOTL
+         ED    LINE+26(10),DOUBLE+4
+         L     R15,20(0,R5)        MSO SERVICE
+         CVD   R15,DOUBLE
+         LA    R2,8
+         BAL   R12,PGTOTL
+         ED    LINE+37(10),DOUBLE+4
+         L     R15,8(0,R5)         TOT SERVICE
+         CVD   R15,DOUBLE
+         LA    R2,12
+         BAL   R12,PGTOTL
+         ED    LINE+48(10),DOUBLE+4
+         SR    R14,R14
+         L     R15,8(0,R5)         TOT SERVICE
+         D     R14,SAMPINTV        PERSEC SERVICE
+         CVD   R15,DOUBLE
+         LA    R2,16
+         BAL   R12,PGTOTL1
+         MVC   LINE+58(7),=X'4020206B202120'
+         ED    LINE+58(7),DOUBLE+5
+         SR    R14,R14
+         L     R15,28(0,R5)        CPU SERVICE
+         OI    80(R11),X'F0'       MAKE IT
+         MVI   82(R11),X'F0'          PACKABLE
+         PACK  DOUBLE(8),80(4,R11)
+         CVB   R1,DOUBLE           CPU COEF
+         ST    R1,CPUCOEF          SAVE COEFFICIENT
+         M     R14,=F'1000'
+         DR    R14,R1              CPU VALUE
+         LR    R7,R15              SAVE CPU VALUE
+         SR    R14,R14
+         L     R15,20(0,R5)        MSO SERVICE
+         OI    84(R11),X'F0'       MAKE IT
+         MVI   86(R11),X'F0'          PACKABLE
+         PACK  DOUBLE(8),84(4,R11)
+         CVB   R1,DOUBLE           MSO COEF
+         M     R14,=F'1000'
+         DR    R14,R1              MSO VALUE
+         SR    R14,R14
+         M     R14,=F'50'          MULT BY 200K IN FRAMES
+         LTR   R7,R7               CPU SERVICE ZERO
+         BZ    *+6                 YES, NO DIVIDE
+         DR    R14,R7              WORKING SET SIZE
+         CVD   R15,DOUBLE
+         LA    R2,20
+         MVC   PERSAV(4),=F'1'     FORCE SAMPLE ADD
+         BAL   R12,PGTOTL1
+         MVC   LINE+66(7),=X'4020206B202120'
+         ED    LINE+66(7),DOUBLE+5
+         SR    R14,R14
+         L     R15,32(0,R5)        TRANSACTION RESIDENCY TIME
+         D     R14,=F'1000'
+         SR    R14,R14
+         M     R14,=F'1024'
+         D     R14,=F'1000'
+         LA    R1,1(0,R15)         SAVE TRANS RES IN SECS
+         SR    R14,R14
+         L     R15,8(0,R5)         TOTAL SERVICE
+         DR    R14,R1              ABSORPTION RATE
+         CVD   R15,DOUBLE
+         LA    R2,24
+         BAL   R12,PGTOTL1
+         MVC   LINE+75(7),=X'4020206B202120'
+         ED    LINE+75(7),DOUBLE+5
+         SR    R14,R14
+         L     R15,4(0,R5)         TRANSACTION ACTIVE TIME
+         D     R14,=F'1000'
+         SR    R14,R14
+         M     R14,=F'1024'
+         D     R14,=F'1000'
+         LA    R1,1(0,R15)         SAVE TRANS ACTIVE IN SECS
+         SR    R14,R14
+         L     R15,8(0,R5)         TOTAL SERVICE
+         DR    R14,R1              TRANSACTION SERVICE RATE
+         CVD   R15,DOUBLE
+         LA    R2,28
+         BAL   R12,PGTOTL1
+         MVC   LINE+82(7),=X'4020206B202120'
+         ED    LINE+82(7),DOUBLE+5
+         SR    R14,R14
+         L     R15,16(0,R5)        WORKLOAD LEVEL
+         D     R14,=F'256'         WORKLOAD UNITS
+         CVD   R15,DOUBLE
+         MVC   LINE+90(5),=X'402021204B'
+         ED    LINE+90(4),DOUBLE+6
+         SRDL  R14,32
+         M     R14,=F'100'
+         D     R14,=F'256'         WORKLOAD HUNDREDTHS
+         CVD   R15,DOUBLE
+         UNPK  LINE+95(2),DOUBLE+6(2)
+         OI    LINE+96,X'F0'
+         MVC   LINE+97(7),=X'4020206B202120'
+         L     R15,36(0,R5)        NO. OF SWAPS
+         CVD   R15,DOUBLE
+         LA    R2,32
+         BAL   R12,PGTOTL1
+         ED    LINE+97(7),DOUBLE+5
+         SR    R14,R14
+         L     R15,4(0,R5)         TRANSACTION ACTIVE TIME
+         M     R14,=F'1024'
+         D     R14,=F'1000'
+         A     R15,=F'500'         ROUND UP
+         SR    R14,R14
+         D     R14,=F'1000'        TRANS ACTIVE IN SECS
+         SR    R14,R14
+         D     R14,SAMPINTV        AVG TRANSACTIONS ACTIVE
+         CVD   R15,DOUBLE
+         C     R15,=F'1'           ADJUST AVG UNLESS EQUAL 1
+         BE    *+8
+         LA    R15,1(0,R15)
+         LA    R2,36
+         BAL   R12,PGTOTL1
+         MVC   LINE+104(5),=X'402021204B'
+         ED    LINE+104(4),DOUBLE+6
+         SRDL  R14,32
+         M     R14,=F'100'
+         D     R14,SAMPINTV        AVG TRANS ACTIVE HUNDREDTHS
+         CVD   R15,DOUBLE
+         UNPK  LINE+109(2),DOUBLE+6(2)
+         OI    LINE+110,X'F0'
+         MVC   LINE+112(4),=X'40202120'
+         L     R15,0(0,R5)         ENDED TRANSACTIONS
+         CVD   R15,DOUBLE
+         LA    R2,40
+         BAL   R12,PGTOTL1
+         ED    LINE+112(4),DOUBLE+6
+         MVC   LINE+119(13),=C'000.00.00.000'
+         LTR   R15,R15             ANY ENDED TRANSACTIONS
+         BZ    PGFORM4             NO, BYPASS DIVIDE ZERO
+         SR    R14,R14
+         L     R15,12(0,R5)        ELAPSED TIME OF ENDED TRANS
+         M     R14,=F'1024'
+         D     R14,=F'1000'        MILLISECS
+         SR    R14,R14
+         D     R14,0(0,R5)         AVG ENDED TIME
+         LR    R7,R15              SAVE MILLISECS
+         LTR   R15,R15             ONLY USE NONZERO VALUES
+         BZ    *+18
+         LA    R2,44
+         MVC   PERSAV(4),=F'1'     FORCE SAMPLE ADD
+         BAL   R12,PGTOTL
+         LR    R15,R7              RELOAD MILLISECS
+         SR    R14,R14
+         D     R14,=A(1000*60*60)  HOURS
+         CVD   R15,DOUBLE
+         UNPK  LINE+119(3),DOUBLE+6(2)
+         OI    LINE+121,X'F0'
+         MVI   LINE+122,C'.'
+         SRDL  R14,32
+         D     R14,=A(1000*60)     MINUTES
+         CVD   R15,DOUBLE
+         UNPK  LINE+123(2),DOUBLE+6(2)
+         OI    LINE+124,X'F0'
+         MVI   LINE+125,C'.'
+         SRDL  R14,32
+         D     R14,=A(1000)        SECONDS AND MILLISECS
+         CVD   R15,DOUBLE
+         UNPK  LINE+126(2),DOUBLE+6(2)
+         OI    LINE+127,X'F0'
+         MVI   LINE+128,C'.'
+         CVD   R14,DOUBLE
+         UNPK  LINE+129(3),DOUBLE+6(2)
+         OI    LINE+131,X'F0'
+         EJECT
+PGFORM4  LA    R2,8(0,R8)          LOAD LINE COUNT ADDR
+         L     R10,=A(PGHDR)
+         LR    R7,R11              SAVE RECORD ADDR
+         L     R11,0(0,R8)         PG OUTPUT DCB ADDR
+         BAL   R12,PRINT           GO PRINT
+         LR    R11,R7              RELOAD RECORD ADDR
+         AH    R5,52(0,R11)       NEXT PERIOD                     WJB
+         BCT   R4,PGFORM3
+         B     SMFGET
+         SPACE 1
+PGFORM5  MVC   LINE+16(5),=C'ZEROS'
+         B     PGFORM4
+         SPACE 3
+PGFORM6  MVI   PGFORM1+1,X'00'
+         MVC   LINE(4),LINE+10     CLEAR TIME
+         MVC   LINE+10(18),=CL18'RESOURCE FACTORS -'
+         MVC   LINE+34(4),=CL4'IOC='
+         MVC   LINE+39(3),64(R11)  IOC
+         MVC   LINE+45(4),=CL4'CPU='
+         MVC   LINE+50(3),67(R11)  CPU
+         MVC   LINE+56(4),=CL4'ERV='
+         MVC   LINE+61(6),70(R11)  ERV
+         MVC   LINE+72(21),=CL21'SERVICE DEFINITIONS -'
+         MVC   LINE+99(4),=CL4'IOC='
+         MVC   LINE+104(4),76(R11) IOC
+         MVC   LINE+111(4),=CL4'CPU='
+         MVC   LINE+116(4),80(R11) CPU
+         MVC   LINE+123(4),=CL4'MSO='
+         MVC   LINE+128(4),84(R11) MSO
+         LA    R2,MAPLNCT1
+         L     R10,=A(MAPHDR)
+         LR    R6,R11
+         L     R11,=A(MAP1)
+         MVI   AREA,X'11'
+         BAL   R12,PRINT
+         MVI   AREA,X'09'
+         LR    R11,R6
+         BAL   R12,TIME            GO SET UP PRINT LINE
+         B     PGFORM1
+         EJECT
+PGTOTL   SR    R14,R14
+         D     R14,=F'1000'        DIVIDE LARGE VALUES BY 1000
+         LA    R15,1(0,R15)        ROUND UP
+         SPACE 1
+PGTOTL1  MH    R6,=H'288'          PERIOD TOTAL INCR
+         SH    R6,=H'288'          MINUS 1 GROUP
+         LA    R6,0(R6,R8)         POINT TO TOTALS GROUP
+         L     R1,PGNSMPA(R2,R6)
+         LA    R1,1(0,R1)
+         ST    R1,PGNSMPA(R2,R6)   ADD 1 TO AVG SAMPLES
+         LR    R1,R15
+         A     R1,PGNTOTA(R2,R6)
+         ST    R1,PGNTOTA(R2,R6)   ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,PGNSMP1(R2,R6)
+         LA    R1,1(0,R1)
+         ST    R1,PGNSMP1(R2,R6)   ADD 1 TO SEL SAMPLES
+         LR    R1,R15
+         A     R1,PGNTOT1(R2,R6)
+         ST    R1,PGNTOT1(R2,R6)   ADD TO SEL TOTAL
+         C     R15,PGNMIN(R2,R6)
+         BNL   *+8
+         ST    R15,PGNMIN(R2,R6)   SAVE MIN VALUE
+         C     R15,PGNMAX(R2,R6)
+         BNH   *+8
+         ST    R15,PGNMAX(R2,R6)   SAVE MAX VALUE
+         LA    R6,1448(0,R8)       ALL TOTALS THIS PERF GROUP
+         CLC   PERSAV(4),=F'1'     PERIOD 1
+         BNE   PGTOTL2             NO, DONT ADD TO SAMPLES
+         L     R1,PGNSMPA(R2,R6)
+         LA    R1,1(0,R1)
+         ST    R1,PGNSMPA(R2,R6)   ADD 1 TO AVG SAMPLES
+         EJECT
+PGTOTL2  LR    R1,R15
+         A     R1,PGNTOTA(R2,R6)
+         ST    R1,PGNTOTA(R2,R6)   ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+46
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+36
+         CLC   PERSAV(4),=F'1'     PERIOD 1
+         BNE   PGTOTL3             NO, DONT ADD TO SAMPLES
+         L     R1,PGNSMP1(R2,R6)
+         LA    R1,1(0,R1)
+         ST    R1,PGNSMP1(R2,R6)   ADD 1 TO SEL SAMPLES
+         SPACE 1
+PGTOTL3  LR    R1,R15
+         A     R1,PGNTOT1(R2,R6)
+         ST    R1,PGNTOT1(R2,R6)   ADD TO SEL TOTAL
+         C     R15,PGNMIN(R2,R6)
+         BNL   *+8
+         ST    R15,PGNMIN(R2,R6)   SAVE MIN VALUE
+         C     R15,PGNMAX(R2,R6)
+         BNH   *+8
+         ST    R15,PGNMAX(R2,R6)   SAVE MAX VALUE
+         L     R6,PERIOD           RELOAD PERIOD NUMBER
+         ST    R6,PERSAV           SAVE CURRENT PERIOD
+         BR    R12
+         EJECT
+TRFORM   BAL   R12,TIME            GO SET TIME IN PRINT LINE
+         L     R8,=A(TRCLIST)      LOAD TRACE OUTPUT
+         MVC   SAMPINTV(4),32(R11) NO. OF SAMPLES
+         LA    R5,0(0,R11)         TRACE DATA SECTION
+         SPACE 1
+TRFORM1  CLI   0(R8),X'FF'         END OF ENTRIES
+         BE    SMFGET              YES, IGNORE RECORD
+         CLI   0(R8),C' '          NO MATCH
+         BE    TRFORM2
+         CLC   0(8,R8),56(R5)      MATCHING TRACE NAME
+         BE    TRFORM3             YES, PROCESS
+         LA    R8,104(0,R8)        NEXT ENTRY
+         B     TRFORM1
+         SPACE 1
+TRFORM2  MVC   0(8,R8),56(R5)      FILL IN NAME
+         SPACE 1
+TRFORM3  L     R15,72(0,R5)        MINIMUM VALUE
+         LTR   R15,R15             NO VALUE PRESENT
+         BM    SMFGET              YES, BYPASS
+         SR    R2,R2
+         BAL   R12,TRTOTL
+         L     R15,76(0,R5)        MAXIMUM VALUE
+         LA    R15,0(0,R15)
+         LA    R2,4
+         BAL   R12,TRTOTL
+         SR    R14,R14
+         SR    R15,R15
+         CLC   SAMPINTV(4),=F'0'   ZERO SAMPLES
+         BZ    *+28                YES, BYPASS 0C9
+         CLC   80(4,R5),=F'0'      ZERO AVG
+         BE    *+18                YES, BYPASS 0C7
+         PACK  DOUBLE(8),80(8,R5)
+         CVB   R15,DOUBLE
+         D     R14,SAMPINTV        AVERAGE VALUE
+         LA    R2,8
+         BAL   R12,TRTOTL
+         L     R15,100(0,R5)       END VALUE
+         LA    R2,12
+         BAL   R12,TRTOTL
+         B     SMFGET
+         EJECT
+TRTOTL   L     R1,TRCSMPA(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,TRCSMPA(R2,R8)   ADD 1 TO AVG SAMPLES
+         LR    R1,R15
+         A     R1,TRCTOTA(R2,R8)
+         ST    R1,TRCTOTA(R2,R8)   ADD TO AVG TOTAL
+         CLC   LINE(4),SELLO       SEL TIME RANGE
+         BL    *+36
+         CLC   LINE(4),SELHI       SEL TIME RANGE
+         BH    *+26
+         L     R1,TRCSMP1(R2,R8)
+         LA    R1,1(0,R1)
+         ST    R1,TRCSMP1(R2,R8)   ADD 1 TO SEL SAMPLES
+         SPACE 1
+TRTOTL1  LR    R1,R15
+         A     R1,TRCTOT1(R2,R8)
+         ST    R1,TRCTOT1(R2,R8)   ADD TO SEL TOTAL
+         C     R15,TRCMIN(R2,R8)
+         BNL   *+8
+         ST    R15,TRCMIN(R2,R8)   SAVE MIN VALUE
+         C     R15,TRCMAX(R2,R8)
+         BNH   *+8
+         ST    R15,TRCMAX(R2,R8)   SAVE MAX VALUE
+         BR    R12
+         EJECT
+PRINT    L     R15,=A(PRINT0)
+         BR    R15
+         SPACE 3
+TIME     L     R15,=A(TIME0)
+         BR    R15
+         SPACE 3
+ASTERISK LTR   R14,R14             ZERO ASTERISKS
+         BCR   8,R12               YES
+         BCTR  R14,0
+         EX    R14,ASTMOVE         PROPAGATE
+         BR    R12
+         SPACE 1
+ASTMOVE  MVC   0(0,R15),ASTLINE    SET ASTERISKS IN PRINT LINE
+         SPACE 3
+INTERVAL XC    DOUBLE(8),DOUBLE
+         MVI   DOUBLE+7,X'0F'
+         MVO   DOUBLE(8),24(1,R11) INTERVAL MINUTES
+         CVB   R14,DOUBLE
+         MH    R14,=H'60'          CONVERT TO SECONDS
+         MVO   DOUBLE(8),25(1,R11) INTERVAL SECONDS
+         CVB   R15,DOUBLE
+         AR    R15,R14
+         SR    R14,R14
+         M     R14,=F'1000'        CONVERT TO MILLISECONDS
+         MVC   DOUBLE+6(2),26(R11) INTERVAL MILLISECONDS
+         CVB   R14,DOUBLE
+         AR    R15,R14             INTERVAL TOTAL IN MILLISECONDS
+         BR    R12
+         SPACE 3
+TIME0    UNPK  LINE(6),16(4,R11)
+         MVI   LINE+4,C' '
+         MVC   LINE+5(127),LINE+4
+         BR    R12
+         EJECT
+PRINT0   L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+         L     R15,=A(PRINT1)
+         LTR   R1,R1               LINE COUNT ZERO
+         BCR   7,R15               NO, GO PRINT LINE
+         PUT   (R11),EJECT
+         PUT   (R11),DSNHDR
+         PUT   (R11),(R10)         PRINT HDR
+         PUT   (R11),DASH
+         SPACE 1
+PRINT1   L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+         LA    R1,1(0,R1)          ADD 1 TO LINE COUNT
+         ST    R1,0(0,R2)             AND SAVE IT
+         PUT   (R11),AREA
+         MVI   LINE+4,C' '
+         MVC   LINE+5(127),LINE+4
+         L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+*        CH    R1,=H'50'           50 LINES PER PAGE        AXC
+         CH    R1,=H'78'           78 LINES PER PAGE        AXC
+         BCR   4,R12               NO, EXIT
+         XC    0(4,R2),0(R2)       INDICATE HDR NEEDED NEXT TIME
+         BR    R12
+         EJECT
+EOJ      BALR  R3,0
+         DROP  R3
+         USING EOJ0,R3
+         SPACE 1
+EOJ0     LA    R1,CLOSLIST
+         CLOSE MF=(E,(1))
+         L     R4,=A(CHNLIST)      CHANNEL OUTPUT DCB LIST
+         L     R6,=A(PGNLIST)      PERF GROUP OUTPUT DCB LIST
+         L     R7,=A(DVNLIST)      DEVICE OUTPUT DCB LIST
+         SPACE 1
+EOJ1     CLC   4(4,R4),=F'0'       END OF LIST
+         BE    EOJ2                YES, GO CLOSE PG DCBS
+         L     R5,0(0,R4)          LOAD DCB ADDR
+         CLOSE ((R5))
+         LA    R4,240(0,R4)        NEXT ENTRY
+         B     EOJ1
+         SPACE 1
+EOJ2     CLI   4(R6),X'00'         END OF LIST
+         BE    EOJ3                YES, GO CLOSE DEV DCBS
+         L     R5,0(0,R6)          LOAD DCB ADDR
+         CLOSE ((R5))
+         LA    R6,1756(0,R6)       NEXT ENTRY
+         B     EOJ2
+         SPACE 1
+EOJ3     CLI   4(R7),X'00'         END OF LIST
+         BNE   EOJ3A               NO, CONTINUE
+         L     R15,=A(TOTAL)       TOTAL ROUTINE ADDR
+         BR    R15
+         SPACE 1
+EOJ3A    L     R5,0(0,R7)          LOAD DCB ADDR
+         CLOSE ((R5))
+         LA    R7,12(0,R7)         NEXT ENTRY
+         B     EOJ3
+         EJECT
+         CNOP  0,8
+TOTAL    LR    R3,R15
+         DROP  R3
+         DROP  R9
+         USING TOTAL,R3
+         L     R15,=A(SMFBR)
+         CLI   1(R15),X'00'        WAS THE SMF DATA SET EMPTY
+         BNE   TOTAL6              YES, EXIT
+         MVC   SHFSID(4),SYSTEM
+         SPACE 3
+TOTAL1   LA    R2,MAPLNCT1
+         SR    R10,R10             NO TOTAL COUNT
+         L     R11,=A(MAP1)
+         MVI   AREA,X'13'
+         BAL   R12,TPRINT
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'09'
+         MVC   LINE+118(14),=CL14'PERCENT BUSY'
+         LA    R4,C1               CPU HEADERS
+         LA    R5,CPUSMPA          1ST CPU COUNTER FIELD
+         LA    R6,1                NUMBER OF GROUPS
+         CLC   4(4,R5),=F'0'       CPU1 ZEROS FOR SAMPLES
+         BE    *+8                 YES, JUST PRINT CPU 0 VALUES
+         LA    R6,2                NUMBER OF GROUPS
+         LA    R7,8                BYTES TO NEXT GROUP
+         BAL   R8,TFORM
+         L     R5,=A(CPUPCNT)      PERCENT ACCUMULATORS
+         MVC   LINE(10),=CL10'CPU BUSY'
+         BAL   R8,PCTFORM
+         L     R11,=A(MAP1)
+         LA    R2,MAPLNCT1
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'09'
+         MVC   LINE+118(14),=CL14'PAGES/SECOND'
+         LA    R4,P1               PAG HEADERS
+         LA    R5,PAGSMPA          1ST PAG COUNTER FIELD
+         LA    R6,23               NUMBER OF GROUPS
+         LA    R7,96               BYTES TO NEXT GROUP
+         BAL   R8,TFORM
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         L     R5,=A(PAGPCNT)      PERCENT ACCUMULATORS
+         MVC   LINE(10),=CL10'PAGING'
+         BAL   R8,PCTFORM
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         LA    R2,MAPLNCT2
+         L     R11,=A(MAP2)
+         MVI   AREA,X'09'
+         MVC   LINE+118(14),=CL14'FRAMES'
+         LA    R4,F1               FRM HEADERS
+         LA    R5,FRMSMPA          1ST FRM COUNTER FIELD
+         LA    R6,4                NUMBER OF GROUPS
+         LA    R7,32               BYTES TO NEXT GROUP
+         MVC   LINE(8),=CL8'PAGEABLE'
+         BAL   R8,TFORM
+         MVI   AREA,X'0B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'09'
+         LA    R4,F5               FRM HEADERS
+         LA    R5,FRMSMPA+16       4TH FRM COUNTER FIELD
+         LA    R6,4                NUMBER OF GROUPS
+         LA    R7,32               BYTES TO NEXT GROUP
+         MVC   LINE(8),=CL8'FIXED'
+         BAL   R8,TFORM
+         MVI   AREA,X'13'
+         BAL   R12,TPRINT
+         MVI   AREA,X'1B'
+         BAL   R12,TPRINT
+         MVI   AREA,X'09'
+         MVC   LINE+118(14),=CL14'SWAPS/INTERVAL'
+         LA    R4,S1               SWP HEADERS
+         LA    R5,SWPSMPA          1ST SWP COUNTER FIELD
+         LA    R6,11               NUMBER OF GROUPS
+         LA    R7,44               BYTES TO NEXT GROUP
+         LA    R10,1               FORCE TOTAL COUNT
+         BAL   R8,TFORM
+         SR    R10,R10             NO TOTAL COUNT
+         XC    MAPLNCT2(4),MAPLNCT2 FORCE EJECT PAGE
+         MVI   AREA,X'11'
+         MVC   LINE+118(14),=CL14'PERCENT BUSY'
+         L     R4,=A(CHNLIST)      CHANNEL OUTPUT LIST
+         LA    R7,8                BYTES TO NEXT GROUP
+         EJECT
+TOTAL2   CLC   4(4,R4),=F'0'       ALL CHANNELS DONE
+         BE    TOTAL4              YES, GO PROCESS PERF GROUPS
+         SR    R1,R1
+         IC    R1,5(0,R4)          CHANNEL ADDR
+         MVC   LINE(21),=CL21'CHANNEL  (X,Y)   BUSY'
+         C     R1,CHNCOMP          NEW CHANNEL
+         BNL   TOTAL3A             YES, GO PROCESS
+         B     TOTAL4              TERMINATE CHAN TOTALS ON LOW CHAN
+         SPACE 1
+TOTAL2A  SR    R1,R1
+         IC    R1,7(0,R4)          CHANNEL ADDR
+         MVC   LINE(21),=CL21'CHANNEL  (X,Y)   BUSY'
+         C     R1,CHNCOMP          NEW CHANNEL
+         BNL   TOTAL3B             YES, GO PROCESS
+         B     TOTAL4              TERMINATE CHAN TOTALS ON LOW CHAN
+         SPACE 1
+TOTAL2B  LA    R4,240(0,R4)        NEXT CHANNEL ENTRY
+         B     TOTAL2
+         EJECT
+TOTAL3A  MVC   LINE+10(1),8(R4)
+         MVC   LINE+12(1),9(R4)
+         MVC   CHSAVE(5),LINE+9    SAVE CHANNEL ID
+         LA    R5,16(0,R4)         1ST HALF DATA ADDR
+         LA    R6,1
+         ST    R1,CHNCOMP
+         BAL   R8,TFORM
+         LA    R5,64(0,R4)         CPU0 CH PERCENT ACCUMULATORS
+         MVC   LINE(2),=CL2'CH'
+         MVC   LINE+3(5),CHSAVE
+         BAL   R8,PCTFORM
+         L     R11,=A(MAP2)
+         LA    R2,MAPLNCT2
+         LA    R7,8                BYTES TO NEXT GROUP
+         B     TOTAL2A
+         SPACE 1
+TOTAL3B  MVC   LINE+10(1),10(R4)
+         MVC   LINE+12(1),11(R4)
+         MVC   CHSAVE(5),LINE+9    SAVE CHANNEL ID
+         LA    R5,20(0,R4)         2ND HALF DATA ADDR
+         LA    R6,1
+         ST    R1,CHNCOMP
+         BAL   R8,TFORM
+         LA    R5,152(0,R4)        CPU1 CH PERCENT ACCUMULATORS
+         MVC   LINE(2),=CL2'CH'
+         MVC   LINE+3(5),CHSAVE
+         BAL   R8,PCTFORM
+         L     R11,=A(MAP2)
+         LA    R2,MAPLNCT2
+         LA    R7,8                BYTES TO NEXT GROUP
+         B     TOTAL2B
+         SPACE 3
+TOTAL4   L     R11,=A(MAP3)
+         LA    R2,MAPLNCT3
+         L     R4,=A(PGNLIST)      PERF GROUP OUTPUT
+         LA    R7,48               BYTES TO NEXT GROUP
+         MVI   AREA,X'09'
+         XC    PERIOD(4),PERIOD    ZERO PERIOD
+         ST    R4,PGSVADDR         SAVE RECORD START
+         EJECT
+TOTAL5   L     R1,PERIOD           LOAD CURRENT PERIOD
+         LA    R1,1(0,R1)
+         ST    R1,PERIOD           SAVE NEW PERIOD
+         CLC   12(4,R4),=X'EEEEEEEE'  END OF PERIODS
+         BE    TOTAL5B1            YES, NEXT PERF GROUP
+         CLC   12(4,R4),=X'AAAAAAAA' ALL TOTALS REQUESTED
+         BE    TOTAL5B2            YES, GO PROCESS
+         CLC   16(4,R4),=F'0'      ZERO CPU SERVICE
+         BE    TOTAL5B             YES, BYPASS THIS PERF GROUP PERIOD
+         MVC   LINE(12),=CL12'PGN='
+         L     R1,PGSVADDR         LOAD PERF GROUP ENTRY ADDR
+         MVC   LINE+5(3),5(R1)     PERF GROUP NUMBER
+         PACK  DOUBLE(8),LINE+5(3)
+         CVB   R1,DOUBLE
+         ST    R1,SHFPGN           SAVE PERF GROUP NUMBER
+         MVC   LINE+12(14),W1
+         MVC   LINE+118(14),=CL14'THOUSANDS OF'
+         LA    R5,12(0,R4)         IOC SERVICE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE(12),=CL12'PER='
+         L     R1,PERIOD
+         CVD   R1,DOUBLE
+         UNPK  LINE+5(1),DOUBLE+7(1)
+         OI    LINE+5,X'F0'
+         CLC   4(4,R4),=X'AAAAAAAA'
+         BNE   *+10
+         MVC   LINE+5(3),=C'ALL'
+         MVC   LINE+12(14),W2
+         MVC   LINE+118(14),=CL14'SERVICE UNITS'
+         LA    R5,16(0,R4)         CPU SERVICE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W3
+         LA    R5,20(0,R4)         MSO SERVICE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W4
+         LA    R5,24(0,R4)         TOTAL SERVICE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W5
+         MVC   LINE+118(14),=CL14'SERVICE UNITS'
+         LA    R5,28(0,R4)         PERSEC SERVICE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W6
+         MVC   LINE+118(14),=CL14'FRAMES'
+         LA    R5,32(0,R4)         WORKING SET SIZE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W7
+         MVC   LINE+118(14),=CL14'SERVICE/SEC'
+         LA    R5,36(0,R4)         ABSORPTION SERVICE RATE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W8
+         LA    R5,40(0,R4)         TRANSACTION SERVICE RATE
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W9
+         LA    R5,44(0,R4)         NO. OF SWAPS
+         LA    R6,1
+         LA    R10,1               FORCE TOTAL COUNT
+         BAL   R8,TFORM
+         SR    R10,R10             NO TOTAL COUNT
+         MVC   LINE+12(14),W10
+         LA    R5,48(0,R4)         AVG TRANSACTIONS
+         LA    R6,1
+         BAL   R8,TFORM
+         MVC   LINE+12(14),W11
+         LA    R5,52(0,R4)         ENDED TRANSACTIONS
+         LA    R6,1
+         LA    R10,1               FORCE TOTAL COUNT
+         BAL   R8,TFORM
+         SR    R10,R10             NO TOTAL COUNT
+         MVC   LINE+12(14),W12
+         MVC   LINE+118(14),=CL14'SECONDS'
+         LA    R5,56(0,R4)         AVG TIME OF ENDED TRANSACTIONS
+         LA    R6,1
+         BAL   R8,TFORM
+         LA    R5,16(0,R4)         CPU SERVICE
+         LA    R6,3
+         AR    R5,R7
+         SR    R14,R14
+         L     R15,=F'100000'
+         D     R14,CPUCOEF
+         SR    R14,R14
+         M     R14,0(0,R5)         CPU SERVICE * 1000/CPUCOEF
+         D     R14,MIPRATE         CPU SECONDS
+         ST    R15,0(0,R5)         AVG CPU SECS TOTAL
+         AR    R5,R7
+         EJECT
+TOTAL5A  AR    R5,R7
+         SR    R14,R14
+         L     R15,=F'100000'
+         D     R14,CPUCOEF
+         SR    R14,R14
+         M     R14,0(0,R5)         CPU SERVICE * 1000/CPUCOEF
+         D     R14,MIPRATE         CPU SECONDS
+         ST    R15,0(0,R5)         SEL/MIN/MAX CPU SECONDS TOTAL
+         BCT   R6,TOTAL5A
+         LA    R5,16(0,R4)         CPU SECONDS
+         LA    R6,1
+         LA    R10,1               FORCE TOTAL COUNT
+         MVC   LINE+12(14),W13
+         MVI   AREA,X'19'
+         MVC   SHFCPU(4),48(R5)    SAVE CPU SECS
+         BAL   R8,TFORM
+         CLC   4(4,R4),=X'AAAAAAAA'  PERF GROUP ALL
+         BE    TOTAL5A1            YES, DONT PRODUCE RECORD
+         ST    R2,REGSAVE
+         L     R2,=A(SHFMAP)       DCB ADDR
+         PUT   (R2),SHFAREA
+         L     R2,REGSAVE
+         EJECT
+TOTAL5A1 SR    R10,R10             NO TOTAL COUNT
+         MVI   AREA,X'09'
+         CLC   MAPLNCT3(4),=F'39'  END OF PAGE
+         BL    *+10                NO, CONTINUE
+         XC    MAPLNCT3(4),MAPLNCT3
+         CLC   4(4,R4),=X'AAAAAAAA'
+         BE    TOTAL5B             DONT RE-ADD ALL TOTALS
+         LA    R5,16(0,R4)         CPU SECONDS
+         AR    R5,R7
+         L     R15,0(0,R5)         TOTAL SECONDS
+         A     R15,TOTAVG
+         ST    R15,TOTAVG
+         AR    R5,R7
+         AR    R5,R7
+         L     R15,0(0,R5)         TOTAL SECONDS
+         A     R15,SELAVG
+         ST    R15,SELAVG
+         SPACE 1
+TOTAL5B  LA    R4,288(0,R4)        NEXT PERIOD TOTALS
+         B     TOTAL5
+         SPACE 1
+TOTAL5B1 L     R4,PGSVADDR         CURRENT PERF GROUP
+         LA    R4,1756(0,R4)       NEXT PERF GROUP
+         ST    R4,PGSVADDR
+         XC    PERIOD(4),PERIOD
+         CLI   4(R4),X'00'         ALL PERF GROUPS DONE
+         BE    TOTAL5C             YES, EXIT
+         B     TOTAL5
+         SPACE 1
+TOTAL5B2 LA    R4,8(0,R4)
+         B     TOTAL5              PROCESS ALL TOTALS
+         EJECT
+TOTAL5C  L     R11,=A(MAP1)
+         LA    R2,MAPLNCT1
+         PACK  DOUBLE(8),DEVLINE+4(2)
+         CVB   R1,DOUBLE
+         MH    R1,=H'60'           INTERVAL SECONDS
+         SR    R14,R14
+         L     R15,CPUSMPA
+         LTR   R15,R15             ANY TOTAL SAMPLES
+         BZ    TOTAL6              NO, BYPASS 0C9
+         MR    R14,R1
+         LR    R1,R15              TOTAL SECONDS IN TIME PERIOD
+         SR    R14,R14
+         L     R15,CPUTOTA
+         D     R14,CPUSMPA
+         L     R6,=F'100'
+         SR    R6,R15              WAIT PERCENT
+         SR    R14,R14
+         L     R15,TOTAVG          CPU SECONDS TOTAL AVG
+         M     R14,=F'100'         PERCENT
+         DR    R14,R1              PRODUCTIVE CPU PERCENT
+         L     R14,=F'100'         TOTAL PERCENT
+         SR    R14,R6              MINUS WAIT
+         SR    R14,R15             MINUS PRODUCTIVE
+         MVC   LINE+12(7),=CL7'AVG CPU'
+         CVD   R6,DOUBLE           WAIT PERCENT
+         ST    R6,SHFCPU           SAVE WAIT PERCENT
+         UNPK  LINE+30(2),DOUBLE+6(2)
+         OI    LINE+31,X'F0'
+         MVC   LINE+35(7),=CL7'WAITING'
+         CVD   R15,DOUBLE          PRODUCTIVE PERCENT
+         UNPK  LINE+50(2),DOUBLE+6(2)
+         OI    LINE+51,X'F0'
+         MVC   LINE+55(7),=CL7'TCBTIME'
+         CVD   R14,DOUBLE          OVERHEAD PERCENT
+         UNPK  LINE+70(2),DOUBLE+6(2)
+         OI    LINE+71,X'F0'
+         MVC   LINE+75(8),=CL8'OVERHEAD'
+         LR    R6,R15              PRODUCTIVE PERCENT
+         AR    R14,R15             PRODUCTIVE PLUS
+         MH    R14,=H'100'            OVERHEAD TIMES 100
+         SRDL  R14,32
+         DR    R14,R6              NON-WAIT TO OVERHEAD RATIO
+         LA    R15,5(0,R15)        ROUND TO NEAREST TENTH
+         CVD   R15,DOUBLE
+         UNPK  LINE+90(3),DOUBLE+6(2)
+         MVC   LINE+93(1),LINE+92
+         MVC   LINE+92(1),LINE+91
+         OI    LINE+93,X'F0'
+         MVI   LINE+91,C'.'
+         MVC   LINE+97(5),=CL5'RATIO'
+         BAL   R12,TPRINT
+         PACK  DOUBLE(8),DEVLINE+4(2)
+         CVB   R1,DOUBLE
+         MH    R1,=H'60'           INTERVAL SECONDS
+         SR    R14,R14
+         L     R15,CPUSMP1
+         LTR   R15,R15             ANY SELECTED SAMPLES
+         BZ    TOTAL6              NO, BYPASS 0C9
+         MR    R14,R1
+         LR    R1,R15              TOTAL SECONDS IN TIME PERIOD
+         SR    R14,R14
+         L     R15,CPUTOT1
+         D     R14,CPUSMP1
+         L     R6,=F'100'
+         SR    R6,R15              WAIT PERCENT
+         SR    R14,R14
+         L     R15,SELAVG          CPU SECONDS TOTAL AVG
+         M     R14,=F'100'         PERCENT
+         DR    R14,R1              PRODUCTIVE CPU PERCENT
+         L     R14,=F'100'         TOTAL PERCENT
+         SR    R14,R6              MINUS WAIT
+         SR    R14,R15             MINUS PRODUCTIVE
+         MVC   LINE+12(7),=CL7'SEL CPU'
+         CVD   R6,DOUBLE           WAIT PERCENT
+         UNPK  LINE+30(2),DOUBLE+6(2)
+         OI    LINE+31,X'F0'
+         MVC   LINE+35(7),=CL7'WAITING'
+         CVD   R15,DOUBLE          PRODUCTIVE PERCENT
+         UNPK  LINE+50(2),DOUBLE+6(2)
+         OI    LINE+51,X'F0'
+         MVC   LINE+55(7),=CL7'TCBTIME'
+         CVD   R14,DOUBLE          OVERHEAD PERCENT
+         UNPK  LINE+70(2),DOUBLE+6(2)
+         OI    LINE+71,X'F0'
+         MVC   LINE+75(8),=CL8'OVERHEAD'
+         LR    R6,R15              PRODUCTIVE PERCENT
+         AR    R14,R15             PRODUCTIVE PLUS
+         MH    R14,=H'100'            OVERHEAD TIMES 100
+         SRDL  R14,32
+         DR    R14,R6              NON-WAIT TO OVERHEAD RATIO
+         LA    R15,5(0,R15)        ROUND TO NEAREST TENTH
+         CVD   R15,DOUBLE
+         UNPK  LINE+90(3),DOUBLE+6(2)
+         MVC   LINE+93(1),LINE+92
+         MVC   LINE+92(1),LINE+91
+         OI    LINE+93,X'F0'
+         MVI   LINE+91,C'.'
+         MVC   LINE+97(5),=CL5'RATIO'
+         BAL   R12,TPRINT
+         EJECT
+TOTAL6   MVC   SHFPGN(4),=F'0'     SET PGN=0
+         ST    R2,REGSAVE
+         L     R2,=A(SHFMAP)       DCB ADDR
+         PUT   (R2),SHFAREA
+         L     R2,REGSAVE
+         L     R4,=A(TRCLIST)      TRACE ENTRY OUTPUT
+         LA    R7,16               BYTES TO NEXT GROUP
+         L     R11,=A(MAP3)
+         LA    R2,MAPLNCT3
+         XC    MAPLNCT3(4),MAPLNCT3
+         MVI   AREA,X'09'
+         SPACE 1
+TOTAL7   CLI   0(R4),X'FF'         ALL TRACE ENTRIES DONE
+         BE    TOTAL8              YES, DEVICE TOTALS NEXT
+         CLI   0(R4),X'40'         ALL TRACE ENTRIES DONE
+         BE    TOTAL8              YES, DEVICE TOTALS NEXT
+         MVC   LINE(8),0(R4)       SET UP TRACE NAME
+         MVC   LINE+12(14),N1
+         LA    R5,8(0,R4)          MINIMUM VALUE
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+12(14),N2
+         LA    R5,12(0,R4)         MAXIMUM VALUE
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+12(14),N3
+         LA    R5,16(0,R4)         AVERAGE VALUE
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+12(14),N4
+         LA    R5,20(0,R4)         END VALUE
+         LA    R6,1
+         MVI   AREA,X'11'
+         BAL   R8,TFORM1
+         MVI   AREA,X'09'
+         CLC   MAPLNCT3(4),=F'40'  10 GROUPS PER PAGE
+         BL    *+10
+         XC    MAPLNCT3(4),MAPLNCT3 FORCE PAGE EJECT
+         SPACE 1
+TOTAL7A  LA    R4,104(0,R4)        NEXT TRACE ENTRY
+         B     TOTAL7
+         EJECT
+TOTAL8   L     R4,=A(DVSLIST)      DEVICE ENTRY OUTPUT
+         LA    R7,16               BYTES TO NEXT GROUP
+         XC    MAPLNCT3(4),MAPLNCT3 FORCE PAGE EJECT
+         MVI   AREA,X'09'
+         SPACE 1
+TOTAL8A  CLI   0(R4),X'FF'         ALL DEVICE ENTRIES DONE
+         BE    TOTALX              YES, EXIT
+         CLI   0(R4),X'40'         ALL DEVICE ENTRIES DONE
+         BE    TOTALX              YES, EXIT
+         MVC   LINE(3),0(R4)       UNIT NAME
+         MVC   LINE+5(6),3(R4)     VOLSER
+         MVC   LINE+14(12),D1
+         MVC   LINE+118(14),=CL14'THOUSANDS'
+         LA    R5,12(0,R4)         SIO COUNT
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+14(12),D2
+         LH    R14,10(0,R4)        OCCURRENCE COUNT
+         CVD   R14,DOUBLE
+         MVC   LINE(12),=X'40206B2020206B2021204040'
+         ED    LINE(10),DOUBLE+4
+         LA    R5,16(0,R4)         PERCENT BUSY
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+14(12),D3
+         MVC   LINE+118(14),=CL14'QLEN  X 100'
+         LA    R5,20(0,R4)         QLENGTH
+         LA    R6,1
+         BAL   R8,TFORM1
+         MVC   LINE+14(12),D4
+         MVC   LINE+118(14),=CL14'MILLISECS'
+         LA    R5,24(0,R4)         AVG SERVICE TIME
+         LA    R6,1
+         MVI   AREA,X'11'
+         BAL   R8,TFORM1
+         MVI   AREA,X'09'
+         CLC   MAPLNCT3(4),=F'40'  10 GROUPS PER PAGE
+         BL    *+10
+         XC    MAPLNCT3(4),MAPLNCT3 FORCE PAGE EJECT
+         LA    R4,108(0,R4)        NEXT DEVICE ENTRY
+         B     TOTAL8A
+         EJECT
+TOTALX   LA    R1,CLOSEMAP
+         CLOSE MF=(E,(1))
+         L     R13,SAVE+4
+         RETURN (14,12),RC=0
+         EJECT
+PCTFORM  MVI   AREA,X'11'
+         LA    R6,LINE-1
+         LA    R7,10               NUMBER OF AREAS
+         L     R9,0(0,R5)          TOTAL OCCURRENCES
+         LTR   R9,R9               ANY OCCURRENCES
+         BZ    PCTFORM2            NO, JUST PRINT HDR
+         LA    R5,4(0,R5)          OCCURRENCE COUNTERS
+         MVC   PCTPREV(4),=F'100'  INIT PCT PRINT PERCENT
+         SPACE 1
+PCTFORM1 LA    R6,12(0,R6)         NEXT AREA ADDR
+         L     R15,0(0,R5)         LOAD COUNT
+         SR    R14,R14
+         M     R14,=F'100'
+         DR    R14,R9              PERCENT OF TOTAL OCCURRENCES
+         LR    R1,R15              SAVE RESULT
+         SRDL  R14,31              REMAINDER X 2
+         DR    R14,R9              CALCULATE ROUNDING
+         AR    R1,R15              ROUND UP 1 IF NECESSARY
+         L     R15,PCTPREV         LOAD PRINT PERCENT
+         LTR   R15,R15             ZERO YET
+         BNZ   *+12                NO, CONTINUE
+         CVD   R1,DOUBLE           USE REMAINDER OVER 100 IF ANY
+         B     *+14                CONTINUE
+         CVD   R15,DOUBLE
+         SR    R15,R1              NEW PRINT PERCENT
+         ST    R15,PCTPREV
+         MVC   DOUBLE(4),=X'40202021'
+         ED    DOUBLE(4),DOUBLE+6
+         MVC   0(3,R6),DOUBLE+1
+         L     R15,4(0,R5)         LOAD COUNT
+         SR    R14,R14
+         M     R14,=F'100'
+         DR    R14,R9              PERCENT OF TOTAL OCCURRENCES
+         LR    R1,R15              SAVE RESULT
+         SRDL  R14,31              REMAINDER X 2
+         DR    R14,R9              CALCULATE ROUNDING
+         AR    R1,R15              ROUND UP 1 IF NECESSARY
+         L     R15,PCTPREV         LOAD PRINT PERCENT
+         LTR   R15,R15             ZERO YET
+         BNZ   *+12                NO, CONTINUE
+         CVD   R1,DOUBLE           USE REMAINDER OVER 100 IF ANY
+         B     *+14                CONTINUE
+         CVD   R15,DOUBLE
+         SR    R15,R1              NEW PRINT PERCENT
+         ST    R15,PCTPREV
+         MVC   DOUBLE(4),=X'40202021'
+         ED    DOUBLE(4),DOUBLE+6
+         MVC   5(3,R6),DOUBLE+1
+         LA    R5,8(0,R5)          NEXT COUNT GROUP
+         BCT   R7,PCTFORM1
+         L     R15,0(0,R5)         LOAD 100 PERCENT COUNT
+         SR    R14,R14
+         M     R14,=F'100'
+         DR    R14,R9              PERCENT OF TOTAL OCCURRENCES
+         LR    R1,R15              SAVE RESULT
+         SRDL  R14,31              REMAINDER X 2
+         DR    R14,R9              CALCULATE ROUNDING
+         AR    R1,R15              ROUND UP 1 IF NECESSARY
+         L     R15,PCTPREV         LOAD PRINT PERCENT
+         LTR   R15,R15             ZERO YET
+         BNZ   *+12                NO, CONTINUE
+         CVD   R1,DOUBLE           USE REMAINDER OVER 100 IF ANY
+         B     *+14                CONTINUE
+         CVD   R15,DOUBLE
+         SR    R15,R1              NEW PRINT PERCENT
+         ST    R15,PCTPREV
+         MVC   DOUBLE(4),=X'40202021'
+         ED    DOUBLE(4),DOUBLE+6
+         MVC   10(3,R6),DOUBLE+1
+         SPACE 1
+PCTFORM2 LA    R2,PCTLINCT
+         L     R11,=A(PCTMAP)
+         MVC   MAPHDRSV(4),=A(PCTHDR)
+         BAL   R12,TPRINT
+         MVC   MAPHDRSV(4),=A(MAPHDR)
+         BR    R8
+         EJECT
+TFORM    CLI   0(R4),X'00'         HDR PRESENT
+         BE    TFORM1              NO, BYPASS
+         MVC   LINE+12(14),0(R4)   MOVE IN HDR
+         LA    R4,14(0,R4)         NEXT HDR ADDR
+         SPACE 1
+TFORM1   MVC   LINE+30(15),T1
+         MVC   LINE+50(15),T2
+         MVC   LINE+70(15),T3
+         MVC   LINE+90(15),T4
+         LR    R9,R5               COUNT FIELDS ADDR
+         L     R1,0(0,R9)          AVG SAMPLES
+         AR    R9,R7               NEXT FIELD
+         SR    R14,R14
+         L     R15,0(0,R9)         AVG TOTAL
+         LTR   R10,R10             FORCE TOTAL COUNT PRINT
+         BZ    TFORM2              NO,BYPASS
+         MVC   LINE(12),=X'40206B2020206B2021204040'
+         CVD   R15,DOUBLE
+         ED    LINE(10),DOUBLE+4
+         SPACE 1
+TFORM2   LTR   R15,R15             ZERO DATA
+         BZ    *+6                 YES, BYPASS DIVIDE
+         DR    R14,R1              AVG
+         CVD   R15,DOUBLE
+         ED    LINE+70(10),DOUBLE+4
+         EJECT
+TFORM3   CLC   LINE+12(3),=C'CPU'  CPU
+         BNE   TFORM3A
+         TM    LINE+16,X'F0'       NUMERIC CPU ID
+         BNO   TFORM4              NO, IGNORE
+         MVC   GRPHTYPE(3),=C'CPU'
+         MVC   GRPHTYPE+3(1),LINE+16  CPU 0 OR CPU 1
+         B     TFORM3X
+         SPACE 1
+TFORM3A  CLC   LINE+12(14),P2      ACTUAL PAGING
+         BNE   TFORM3B
+         MVC   GRPHTYPE(4),=C'PAGE'
+         B     TFORM3X
+         SPACE 1
+TFORM3B  CLC   LINE(8),=CL8'CHANNEL'
+         BNE   TFORM4
+         MVC   GRPHTYPE(2),=C'CH'
+         MVC   GRPHTYPE+2(1),LINE+10
+         MVC   GRPHTYPE+3(1),LINE+12
+         SPACE 1
+TFORM3X  MVC   GRPHXXIS(3),LINE+77
+         MVC   GRPHYXIS(2),TIMELO
+         ST    R2,REGSAVE
+         L     R2,=A(TODMAP)
+         PUT   (R2),TODAREA
+         L     R2,REGSAVE
+         SPACE 1
+TFORM4   AR    R9,R7               NEXT FIELD
+         L     R1,0(0,R9)          SEL SAMPLES
+         AR    R9,R7               NEXT FIELD
+         SR    R14,R14
+         L     R15,0(0,R9)         SEL TOTAL
+         LTR   R15,R15             ZERO DATA
+         BZ    *+6                 YES, BYPASS DIVIDE
+         DR    R14,R1              SEL
+         CVD   R15,DOUBLE
+         ED    LINE+90(10),DOUBLE+4
+         AR    R9,R7               NEXT FIELD
+         L     R15,0(0,R9)         MIN
+         C     R15,=X'7FFFFFFF'    HIGH VALUE
+         BNE   *+6                 NO, BYPASS
+         SR    R15,R15             MAKE IT ZERO
+         CVD   R15,DOUBLE
+         ED    LINE+30(10),DOUBLE+4
+         AR    R9,R7               NEXT FIELD
+         L     R15,0(0,R9)         MAX TOTAL
+         CVD   R15,DOUBLE
+         ED    LINE+50(10),DOUBLE+4
+         BAL   R12,TPRINT
+         LA    R5,4(0,R5)          NEXT GROUP
+         BCT   R6,TFORM
+         BR    R8
+         EJECT
+TPRINT   L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+         LTR   R1,R1               LINE COUNT ZERO
+         BNZ   TPRINT1             NO, GO PRINT LINE
+         PUT   (R11),EJECT
+         PUT   (R11),DSNHDR
+         L     R9,MAPHDRSV         LOAD CURRENT MAPHDR
+         PUT   (R11),(R9)          PRINT HDR
+         PUT   (R11),DASH
+         SPACE 1
+TPRINT1  L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+         LA    R1,1(0,R1)          ADD 1 TO LINE COUNT
+         ST    R1,0(0,R2)             AND SAVE IT
+         PUT   (R11),AREA
+         MVI   LINE,C' '
+         MVC   LINE+1(131),LINE
+         L     R1,0(0,R2)          LOAD CURRENT LINE COUNT
+*        CH    R1,=H'48'           48 LINES PER PAGE       AXC
+         CH    R1,=H'78'           78 LINES PER PAGE       AXC
+         BCR   4,R12               NO, EXIT
+         XC    0(4,R2),0(R2)       INDICATE HDR NEEDED NEXT TIME
+         BR    R12
+         EJECT
+T1       DC    X'40206B2020206B202120',CL5'  MIN'
+T2       DC    X'40206B2020206B202120',CL5'  MAX'
+T3       DC    X'40206B2020206B202120',CL5'  AVG'
+T4       DC    X'40206B2020206B202120',CL5'  SEL'
+         SPACE 1
+C1       DC    CL14'CPU 0  BUSY'
+C2       DC    CL14'CPU 1  BUSY'
+         SPACE 1
+P1       DC    CL14'TOTAL PAGING  '
+P2       DC    CL14'ACTUAL PAGING '
+P3       DC    CL14'TOTAL RECLAIMS'
+P4       DC    CL14'PAGE FAULTS   '
+P5       DC    CL14'ADRSPC TOTAL  '
+P6       DC    CL14'ADRSPC ACTUAL '
+P7       DC    CL14'ADRSPC IN     '
+P8       DC    CL14'ADRSPC OUT    '
+P9       DC    CL14'ADRSPC RECLAIM'
+P10      DC    CL14'COMMON TOTAL  '
+P11      DC    CL14'COMMON ACTUAL '
+P12      DC    CL14'COMMON IN     '
+P13      DC    CL14'COMMON OUT    '
+P14      DC    CL14'COMMON RECLAIM'
+P15      DC    CL14'VIO TOTAL     '
+P16      DC    CL14'VIO ACTUAL    '
+P17      DC    CL14'VIO IN        '
+P18      DC    CL14'VIO OUT       '
+P19      DC    CL14'VIO RECLAIM   '
+P20      DC    CL14'SWAP TOTAL    '
+P21      DC    CL14'SWAP SEQUENCE '
+P22      DC    CL14'SWAP IN       '
+P23      DC    CL14'SWAP OUT      '
+         EJECT
+F1       DC    CL14'LPA/CSA FRAMES'
+F2       DC    CL14'PRIVATE FRAMES'
+F3       DC    CL14'UNUSED FRAMES'
+F4       DC    CL14'TOTAL FRAMES'
+F5       DC    CL14'LPA/CSA FRAMES'
+F6       DC    CL14'PRIVATE FRAMES'
+F7       DC    CL14'SQA FRAMES'
+F8       DC    CL14'TOTAL FRAMES'
+         SPACE 1
+S1       DC    CL14'INTERM SWAPS'
+S2       DC    CL14'OUTERM SWAPS'
+S3       DC    CL14'LONGWT SWAPS'
+S4       DC    CL14'AUXLSS SWAPS'
+S5       DC    CL14'REALSS SWAPS'
+S6       DC    CL14'DETDWT SWAPS'
+S7       DC    CL14'REQEST SWAPS'
+S8       DC    CL14'ENQEXC SWAPS'
+S9       DC    CL14'RCVEXC SWAPS'
+S10      DC    CL14'UNILAT SWAPS'
+S11      DC    CL14'TOTAL SWAPS'
+         SPACE 1
+W1       DC    CL14'IOC SERVICE'
+W2       DC    CL14'CPU SERVICE'
+W3       DC    CL14'MSO SERVICE'
+W4       DC    CL14'TOTAL SERVICE'
+W5       DC    CL14'PERSEC SERVICE'
+W6       DC    CL14'WORK SET SIZE'
+W7       DC    CL14'ABS SERV RATE'
+W8       DC    CL14'TRS SERV RATE'
+W9       DC    CL14'NO. OF SWAPS'
+W10      DC    CL14'AVG TRANS'
+W11      DC    CL14'ENDED TRANS'
+W12      DC    CL14'AVG ELAPSED'
+W13      DC    CL14'CPU SECONDS'
+         SPACE 1
+N1       DC    CL14'MINIMUM'
+N2       DC    CL14'MAXIMUM'
+N3       DC    CL14'AVERAGE'
+N4       DC    CL14'END VALUE'
+         SPACE 1
+D1       DC    CL12'SIO COUNT'
+D2       DC    CL12'PERCENT BUSY'
+D3       DC    CL12'QLENGTH'
+D4       DC    CL12'AVG SERVICE'
+         EJECT
+         DS    0D
+SAVE     DS    18F
+         SPACE 3
+         LTORG
+         EJECT
+         DS    0D
+DOUBLE   DS    2F
+EDIT     DS    2F
+CHNCOMP  DC    F'-1'
+MAPLNCT1 DC    F'0'
+MAPLNCT2 DC    F'0'
+MAPLNCT3 DC    F'0'
+PCTLINCT DC    F'0'
+CPULINCT DC    F'0'
+PAGLNCT1 DC    F'0'
+PAGLNCT2 DC    F'0'
+PAGLNCT3 DC    F'0'
+PAGLNCT4 DC    F'0'
+PAGLNCT5 DC    F'0'
+PAGLNCT6 DC    F'0'
+FRMLINCT DC    F'0'
+SWPLINCT DC    F'0'
+CHCLINCT DC    F'0'
+DVCLINCT DC    F'0'
+K0000    DC    F'0'
+DEVQUE   DC    F'0'
+DEVBUSY  DC    F'0'
+DEVSIZE  DC    F'0'
+DEVSW    DC    F'0'
+PERIOD   DC    F'0'
+PERSAV   DC    F'0'
+PGSVADDR DC    F'0'
+MAPHDRSV DC    A(MAPHDR)
+PAGPSEC  DC    F'0'
+SAMPINTV DC    F'0'
+TOTAVG   DC    F'0'
+SELAVG   DC    F'0'
+CPUCOEF  DC    F'0'
+MIPRATE  DC    F'0'
+PCTPREV  DC    F'0'
+REGSAVE  DC    F'0'
+         SPACE 3
+SYSTEM   DC    F'0'
+TIMELO   DC    F'0'
+TIMEHI   DC    F'0'
+DATELO   DC    3F'0'
+DATEHI   DC    3F'0'
+SELLO    DC    F'0'
+SELHI    DC    F'0'
+         EJECT
+         SPACE 3
+EJECT    DC    X'8B'
+AREA     DC    X'09'
+LINE     DC    CL132' '
+DEVLINE  DC    CL8' '
+CHSAVE   DC    CL5' '
+         SPACE 3
+TODAREA  DS    0CL12
+GRPHTYPE DC    CL4' '
+         DC    C'-'
+GRPHXXIS DC    CL3' '
+         DC    C'-'
+GRPHYXIS DC    CL3' '
+         SPACE 3
+         DS    0F
+SHFAREA  DS    0CL12
+SHFSID   DC    CL4' '
+SHFPGN   DC    F'0'
+SHFCPU   DC    F'0'
+         EJECT
+         DS    0F
+OPENLIST DC    X'00',AL3(SMF)
+         DC    X'0F',AL3(DEVNAME)
+         DC    X'0F',AL3(CPU)
+         DC    X'0F',AL3(PAG1)
+         DC    X'0F',AL3(PAG2)
+         DC    X'0F',AL3(PAG3)
+         DC    X'0F',AL3(PAG4)
+         DC    X'0F',AL3(PAG5)
+         DC    X'0F',AL3(PAG6)
+         DC    X'0F',AL3(FRAME)
+         DC    X'0F',AL3(SWAP)
+         DC    X'0F',AL3(MAP1)
+         DC    X'0F',AL3(MAP2)
+         DC    X'0F',AL3(MAP3)
+         DC    X'0F',AL3(SHFMAP)
+         DC    X'0F',AL3(TODMAP)
+         DC    X'0F',AL3(PCTMAP)
+         DC    X'0F',AL3(CLIST)
+         DC    X'8F',AL3(DLIST)
+         SPACE 3
+CLOSLIST DC    X'00',AL3(SMF)
+         DC    X'00',AL3(DEVNAME)
+         DC    X'00',AL3(CPU)
+         DC    X'00',AL3(PAG1)
+         DC    X'00',AL3(PAG2)
+         DC    X'00',AL3(PAG3)
+         DC    X'00',AL3(PAG4)
+         DC    X'00',AL3(PAG5)
+         DC    X'00',AL3(PAG6)
+         DC    X'00',AL3(FRAME)
+         DC    X'00',AL3(SWAP)
+         DC    X'00',AL3(CLIST)
+         DC    X'80',AL3(DLIST)
+         SPACE 3
+CLOSEMAP DC    X'00',AL3(MAP1)
+         DC    X'00',AL3(MAP2)
+         DC    X'00',AL3(MAP3)
+         DC    X'00',AL3(SHFMAP)
+         DC    X'00',AL3(TODMAP)
+         DC    X'80',AL3(PCTMAP)
+         EJECT
+         DS    0D
+CHTABLE  DC    193X'F0'
+         DC    XL6'0A0B0C0D0E0F'
+         DC    41X'F0'
+         DC    XL10'00010203040506070809'
+         DC    6X'F0'
+         SPACE 3
+         DS    0F
+FRAMTAB  DC    F'152'
+         DC    F'164'
+         DC    F'140'
+         DC    F'176'
+         DC    F'200'
+         DC    F'212'
+         DC    F'188'
+         DC    F'224'
+         SPACE 3
+         DS    0F
+SWAPTAB  DC    F'296'
+         DC    F'332'
+         DC    F'300'
+         DC    F'316'
+         DC    F'320'
+         DC    F'304'
+         DC    F'312'
+         DC    F'328'
+         DC    F'324'
+         DC    F'308'
+         DC    F'64'
+         EJECT
+CPUSMPA  DC    2F'0'
+CPUTOTA  DC    2F'0'
+CPUSMP1  DC    2F'0'
+CPUTOT1  DC    2F'0'
+CPUMIN   DC    2X'7FFFFFFF'
+CPUMAX   DC    2F'0'
+         SPACE 1
+PAGSMPA  DC    24F'0'
+PAGTOTA  DC    24F'0'
+PAGSMP1  DC    24F'0'
+PAGTOT1  DC    24F'0'
+PAGMIN   DC    24X'7FFFFFFF'
+PAGMAX   DC    24F'0'
+         SPACE 1
+FRMSMPA  DC    8F'0'
+FRMTOTA  DC    8F'0'
+FRMSMP1  DC    8F'0'
+FRMTOT1  DC    8F'0'
+FRMMIN   DC    8X'7FFFFFFF'
+FRMMAX   DC    8F'0'
+         SPACE 1
+SWPSMPA  DC    11F'0'
+SWPTOTA  DC    11F'0'
+SWPSMP1  DC    11F'0'
+SWPTOT1  DC    11F'0'
+SWPMIN   DC    11X'7FFFFFFF'
+SWPMAX   DC    11F'0'
+         SPACE 1
+CPUPCNT  DC    22F'0'
+PAGPCNT  DC    22F'0'
+         EJECT
+CHNSMPA  EQU   16
+CHNTOTA  EQU   24
+CHNSMP1  EQU   32
+CHNTOT1  EQU   40
+CHNMIN   EQU   48
+CHNMAX   EQU   56
+CHNPCNT  EQU   64
+         SPACE 1
+PGNSMPA  EQU   12
+PGNTOTA  EQU   60
+PGNSMP1  EQU   108
+PGNTOT1  EQU   156
+PGNMIN   EQU   204
+PGNMAX   EQU   252
+         SPACE 1
+TRCSMPA  EQU   8
+TRCTOTA  EQU   24
+TRCSMP1  EQU   40
+TRCTOT1  EQU   56
+TRCMIN   EQU   72
+TRCMAX   EQU   88
+         SPACE 1
+DVSSMPA  EQU   12
+DVSTOTA  EQU   28
+DVSSMP1  EQU   44
+DVSTOT1  EQU   60
+DVSMIN   EQU   76
+DVSMAX   EQU   92
+         EJECT
+DSNHDR   DC    X'11',CL16'RMFMAP -   DATE='
+DSNDATE  DC    CL6'YY.DDD',CL11',   VOLUME='
+DSNVOL   DC    CL6' ',CL11',   SYSTEM='
+DSNSYS   DC    CL4' ',CL11',   DSNAME='
+DSNDSN   DC    CL44' ',CL23' '
+         SPACE 1
+CHNHDR   DC    X'09'
+         DC    CL7' ',CL10'CHANNEL  ('
+CHNCPUA  DC    C' ',C','
+CHNCHNA  DC    C' ',C')',CL50'    BUSY',CL10'CHANNEL  ('
+CHNCPUB  DC    C' ',C','
+CHNCHNB  DC    C' ',C')',CL47'    BUSY'
+         SPACE 1
+MAPHDR   DC    X'09'
+         DC    CL42'RMFMAP -   RMF DATA REDUCTION PROGRAM,'
+         DC    CL90'VERSION  7.0'
+         SPACE 1
+DASH     DC    X'19',132C'-'
+         SPACE 1
+ASTLINE  DC    CL50'****1****2****3****4****5****6****7****8****9****A'
+         SPACE 1
+CPUHDR   DC    X'09'
+         DC    CL7' ',CL64'CPU 0   BUSY',CL61'CPU 1   BUSY'
+         SPACE 1
+         SPACE 1
+FRMHDR   DC    X'09'
+         DC    CL6' ',CL23'MIN/MAX/AVG',CL29'LPA/CSA'
+         DC    CL22'PRIVATE',CL37'UNUSED (P)   SQA (F)'
+         DC    CL15'TOTAL'
+         SPACE 1
+SWPHDR   DC    X'09',CL10' '
+         DC    CL10'INTERM',CL10'OUTERM',CL10'LONGWT',CL10'AUXLSS'
+         DC    CL10'REALSS',CL10'DETDWT',CL10'REQEST',CL10'ENQEXC'
+         DC    CL10'RCVEXC',CL9'UNILAT',CL23'TOTL SWAPS   PGIN PGOUT'
+         SPACE 1
+PGHDR    DC    X'09',CL5' '
+         DC    CL5'IPS',CL7'PERF',CL11'IOC SERV',CL11'CPU SERV'
+         DC    CL11'MSO SERV',CL10'TOT SERV',CL8'PERSEC',CL9' WKSET'
+         DC    CL7'AVGAB',CL8'AVGTS',CL7'WKLD',CL8'SWAPS',CL6'AVGT'
+         DC    CL6'ENDT',CL13'AVG END TIME'
+         SPACE 1
+DEVHDR   DC    X'09',CL6' '
+         DC    CL5'ADR',CL5'LCH',CL9'VOLSER',CL12'SIO COUNT'
+         DC    CL10'SIO/SMP',CL7'AVGT',CL9'QLENGTH'
+         DC    CL9'DEFERD',CL9'DEFERP',CL8'AVG DS',CL11'%DEVBUSY'
+         DC    CL11'%CUDELAY',CL13'%RESVDELAY',CL8'%DEVRESV'
+         SPACE 1
+PCTHDR   DC    X'11',CL12'PERCENT'
+         DC    CL12'00   05',CL12'10   15',CL12'20   25',CL12'30   35'
+         DC    CL12'40   45',CL12'50   55',CL12'60   65',CL12'70   75'
+         DC    CL12'80   85',CL12'90   95  100'
+         EJECT
+PAGHDR1  DC    X'09'
+         DC    CL7' ',CL25'ACTUAL PAGING',CL25'ADDRSPC PAGING'
+         DC    CL25'COMMON PAGING',CL25'VIO  PAGING'
+         DC    CL25'SWAP PAGING'
+         SPACE 1
+PAGHDR2  DC    X'09'
+         DC    CL7' ',CL25'TOTAL PAGING',CL25'TOTAL RECLAIM'
+         DC    CL25'ADDRSPC RECLAIM',CL25'COMMON RECLAIM'
+         DC    CL25'VIO RECLAIM'
+         SPACE 1
+PAGHDR3  DC    X'09'
+         DC    CL7' ',CL25'ADDRSPC TOTAL',CL25'ADDRSPC ACTUAL'
+         DC    CL25'ADDRSPC IN',CL25'ADDRSPC OUT'
+         DC    CL25'ADDRSPC RECLAIM'
+         SPACE 1
+PAGHDR4  DC    X'09'
+         DC    CL7' ',CL25'COMMON TOTAL',CL25'COMMON ACTUAL'
+         DC    CL25'COMMON IN',CL25'COMMON OUT'
+         DC    CL25'COMMON RECLAIM'
+         SPACE 1
+PAGHDR5  DC    X'09'
+         DC    CL7' ',CL25'VIO TOTAL',CL25'VIO ACTUAL'
+         DC    CL25'VIO IN',CL25'VIO  OUT'
+         DC    CL25'VIO RECLAIM'
+         SPACE 1
+PAGHDR6  DC    X'09'
+         DC    CL7' ',CL25'SWAP TOTAL',CL25'SWAP SEQUENCE'
+         DC    CL25'SWAP IN',CL25'SWAP OUT'
+         DC    CL25'PAGE FAULTS'
+         EJECT
+         PRINT NOGEN
+SMF      DCB   DDNAME=SMF,DSORG=PS,MACRF=(GL),EODAD=EOJ,BFTEK=A
+MAP1     DCB   DDNAME=MAP1,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+MAP2     DCB   DDNAME=MAP2,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+MAP3     DCB   DDNAME=MAP3,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PCTMAP   DCB   DDNAME=PCTMAP,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,X
+               MACRF=(PM)
+CPU      DCB   DDNAME=CPU,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PAG1     DCB   DDNAME=PAG1,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PAG2     DCB   DDNAME=PAG2,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PAG3     DCB   DDNAME=PAG3,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PAG4     DCB   DDNAME=PAG4,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PAG5     DCB   DDNAME=PAG5,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+PAG6     DCB   DDNAME=PAG6,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+FRAME    DCB   DDNAME=FRAME,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330, X
+               MACRF=(PM)
+SWAP     DCB   DDNAME=SWAP,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,  X
+               MACRF=(PM)
+CLIST    DCB   DDNAME=CLIST,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330, X
+               MACRF=(PM)
+DLIST    DCB   DDNAME=DLIST,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330, X
+               MACRF=(PM)
+DEVNAME  DCB   DDNAME=DEVNAME,DSORG=PS,RECFM=FB,LRECL=8,BLKSIZE=800,   X
+               MACRF=(PM)
+TODMAP   DCB   DDNAME=TODMAP,DSORG=PS,RECFM=FB,LRECL=12,BLKSIZE=6144,  X
+               MACRF=(PM)
+SHFMAP   DCB   DDNAME=SHFMAP,DSORG=PS,RECFM=FB,LRECL=12,BLKSIZE=6144,  X
+               MACRF=(PM)
+         EJECT
+CHDCB01  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB02  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB03  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB04  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB05  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB06  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB07  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB08  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB09  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB10  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB11  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB12  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB13  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB14  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB15  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB16  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB17  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB18  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB19  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+CHDCB20  DCB   DDNAME=CHX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+         EJECT
+PGDCB01  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB02  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB03  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB04  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB05  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB06  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB07  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB08  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB09  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB10  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB11  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB12  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB13  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB14  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB15  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+         EJECT
+PGDCB16  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB17  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB18  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB19  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB20  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB21  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB22  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB23  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB24  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB25  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB26  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB27  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB28  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB29  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB30  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB31  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB32  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB33  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB34  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB35  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB36  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB37  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB38  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB39  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+PGDCB40  DCB   DDNAME=PGX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+         EJECT
+DVDCB01  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB02  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB03  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB04  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB05  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB06  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB07  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB08  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB09  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB10  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB11  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB12  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB13  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB14  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB15  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB16  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB17  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB18  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB19  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+DVDCB20  DCB   DDNAME=DVX,DSORG=PS,RECFM=FBM,LRECL=133,BLKSIZE=1330,   X
+               MACRF=(PM)
+         EJECT
+CHNLIST  DC    A(CHDCB01),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB02),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB03),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB04),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB05),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB06),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB07),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB08),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB09),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB10),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB11),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB12),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB13),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB14),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB15),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB16),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB17),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB18),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB19),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    A(CHDCB20),2H'0',2F'0',8F'0',2X'7FFFFFFF',2F'0',44F'0'
+         DC    4F'0'
+         SPACE 3
+DVNLIST  DC    A(DVDCB01),F'0',F'0'
+         DC    A(DVDCB02),F'0',F'0'
+         DC    A(DVDCB03),F'0',F'0'
+         DC    A(DVDCB04),F'0',F'0'
+         DC    A(DVDCB05),F'0',F'0'
+         DC    A(DVDCB06),F'0',F'0'
+         DC    A(DVDCB07),F'0',F'0'
+         DC    A(DVDCB08),F'0',F'0'
+         DC    A(DVDCB09),F'0',F'0'
+         DC    A(DVDCB10),F'0',F'0'
+         DC    A(DVDCB11),F'0',F'0'
+         DC    A(DVDCB12),F'0',F'0'
+         DC    A(DVDCB13),F'0',F'0'
+         DC    A(DVDCB14),F'0',F'0'
+         DC    A(DVDCB15),F'0',F'0'
+         DC    A(DVDCB16),F'0',F'0'
+         DC    A(DVDCB17),F'0',F'0'
+         DC    A(DVDCB18),F'0',F'0'
+         DC    A(DVDCB19),F'0',F'0'
+         DC    A(DVDCB20),F'0',F'0'
+         EJECT
+TRCLIST  DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL8' ',16F'0',4X'7FFFFFFF',4F'0'
+         DC    X'FF'
+         EJECT
+         DS    0F
+DVSLIST  DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    CL10' ',H'0',16F'0',4X'7FFFFFFF',4F'0'
+         DC    X'FF',107X'00'
+         EJECT
+PGNLIST  DC    A(PGDCB01),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB02),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB03),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB04),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB05),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB06),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB07),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB08),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB09),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB10),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         EJECT
+         DC    A(PGDCB11),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB12),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB13),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB14),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB15),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB16),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB17),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB18),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB19),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB20),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         EJECT
+         DC    A(PGDCB21),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB22),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB23),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB24),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB25),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB26),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB27),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB28),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB29),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    A(PGDCB30),X'00',CL3' ',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    48F'0',12X'7FFFFFFF',12F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0',48F'0',12X'7FFFFFFF',12F'0'
+         DC    X'EEEEEEEE',F'0'
+         DC    2F'0'
+         EJECT
+R0       EQU   0
+R1       EQU   1
+R2       EQU   2
+R3       EQU   3
+R4       EQU   4
+R5       EQU   5
+R6       EQU   6
+R7       EQU   7
+R8       EQU   8
+R9       EQU   9
+R10      EQU   10
+R11      EQU   11
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+R15      EQU   15
+         END

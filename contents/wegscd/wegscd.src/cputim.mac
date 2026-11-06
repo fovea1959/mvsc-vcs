@@ -1,0 +1,35 @@
+CPUTIM   CSECT
+*        REAL*8 FUNCTION CPUTIM(DUMMY)
+*        RETURNS TASK CPU TIME IN SECONDS (RESULT IN FPR 0)
+R0       EQU   0
+R2       EQU   2
+R12      EQU   12
+R13      EQU   13
+R14      EQU   14
+F0       EQU   0
+         STM   R14,R12,12(R13)    SAVE CALLER'S REGISTERS
+         BALR  R12,0
+         USING *,R12
+         LA    R2,SAVE            OUR SAVE AREA
+         ST    R13,4(,R2)         BACK CHAIN
+         ST    R2,8(,R13)         FORWARD CHAIN
+         LR    R13,R2
+         L     R2,540             PSATOLD: CURRENT TCB (PSA+X'21C')
+         USING TCB,R2
+         L     R0,TCBTTIME        ACCUMULATED CPU TIME FOR THIS TCB
+         DROP  R2
+         ST    R0,DBL+4           INTEGER INTO LOW WORD
+         LD    F0,DBL             UNNORMALIZED 4E000000 + TICKS
+         SD    F0,MAGIC           REMOVE THE BIAS -> TICKS AS DOUBLE
+         DD    F0,RATE            TICKS / 38400 = SECONDS
+         L     R13,4(,R13)        RESTORE CALLER'S SAVE AREA
+         L     R14,12(,R13)
+         LM    R2,R12,28(R13)     R0/R1/R15 NOT RESTORED (FUNCTION)
+         BR    R14
+         DS    0D
+SAVE     DC    18F'0'
+DBL      DC    X'4E000000',F'0'
+MAGIC    DC    X'4E00000000000000'
+RATE     DC    D'38400'
+         IKJTCB DSECT=YES,LIST=YES
+         END

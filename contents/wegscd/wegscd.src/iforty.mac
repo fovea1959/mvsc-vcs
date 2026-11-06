@@ -1,0 +1,5 @@
+IFORTY   CSECT
+         LA    0,42      RESULT
+         SR    15,15     RETURN CODE 0
+         BR    14        BRANCH TO ADDRESS IN R14 (RETURN TO FORTRAN)
+         END   IFORTY
