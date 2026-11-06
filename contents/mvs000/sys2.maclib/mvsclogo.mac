@@ -1,0 +1,194 @@
+* >>>>>>>>>>>>>>>>>>>>>> Sample Screen Layout <<<<<<<<<<<<<<<<<<<<<<<<
+*
+* ----+----1----5----2----+----3----+----4----+----5----+----6----+---
+* Terminal                                                          Dat
+*                                                                   Tim
+*
+*                            TTTTTTTTTTTT   KKKK  KKKKK   555555555555
+*                            TT   TT   TT    KK    KK     55
+*                            TT   TT   TT    KK   KK      55
+*                                 TT         KK  KK       55
+*         ×l      _,,,---,,_      TT         KK KK        55
+*  ZZZzz /,'.-'`'    -.  ;-;;,    TT         KKKK         55555555555
+*       ×,4-  ) )-,_. ,( (  ''-'  TT         KKKKK                  55
+*      '---''(_/--'  `-')_)       TT         KK  KK                 55
+*                                 TT         KK   KK                55
+*        The MVS 3.8j             TT         KK    KK               55
+*      Tur(n)key System           TT         KK     KK              55
+*                               TTTTTT      KKKK     KKK  55555555555
+*
+* TK3 created by Volker Bandke       volker@bandke.org
+* TK4- update by Juergen Winkelmann  juergen.winkelmann@pebble-beach.ch
+* TK5  update by Rob Prins           prin0096@gmail.com
+*      see SYS2.JCLLIB(CREDITS) for complete credits
+*                  MVS 3.8j Level 8505 - Update 5
+*
+* Logon ===>
+*                                                             RUNNING
+         PUSH  PRINT
+         PRINT OFF
+TK5MLOG  DS    0D
+TK5MLOGW $WCC  (RESETKBD,MDT)
+         $SBA  (1,1)
+         DC    C'Terminal'
+         $SBA  (1,9)
+         $SF   (SKIP,HI)
+         $SBA  (1,11)
+         $SF   (SKIP,HI)
+TK5MDEV  DC    CL8' '
+         $SBA  (1,20)
+         $SF   (SKIP,HI)
+         $SBA  (1,66)
+         $SF   (SKIP,HI)
+         DC    C'Date'
+         $SBA  (1,71)
+         $SF   (SKIP,HI)
+         $SBA  (1,72)
+         $SF   (SKIP,HI)
+TK5MDATE DC    CL8' '
+         $SBA  (2,1)
+         $SF   (SKIP,HI)
+         $SBA  (2,66)
+         $SF   (SKIP,HI)
+         DC    C'Time'
+         $SBA  (2,72)
+         $SF   (SKIP,HI)
+TK5MTIME DC    CL8' '
+         $SBA  (8,8)
+         $SF   (SKIP,HI)
+         DC    C'×l'
+         $SBA  (8,16)
+         $SF   (SKIP,HI)
+         DC    C'_,,,---,,_'
+         $SBA  (9,1)
+         $SF   (SKIP,HI)
+         DC    C'ZZZzz /,''.-''`''    -.  ;-;;,'
+         $SBA  (10,6)
+         $SF   (SKIP,HI)
+         DC    C'×,4-  ) )-,_. ,( (  ''''-'''
+         $SBA  (11,5)
+         $SF   (SKIP,HI)
+         DC    C'''---''''(_/--''  `-'')_)'
+         $SBA  (13,8)
+         DC    X'2842F6'                  , Color yellow
+         DC    C'The MVS 3.8j'
+         $SBA  (14,6)
+         DC    C'Tur(n)key system'
+         $SBA  (4,29)
+         DC    X'2842F2'                  , Color red
+         DC    C'  ______________  '
+         $SBA  (5,29)
+         DC    C' /××××××××××××××\ '
+         $SBA  (6,29)
+         DC    C'× ×××××××××××××× ×'
+         $SBA  (7,29)
+         DC    C'×/____/××××\ ___\×'
+         $SBA  (8,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (9,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (10,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (11,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (12,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (13,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (14,31)
+         DC    C'   × ×××× ×     '
+         $SBA  (15,31)
+         DC    C'   ×/____\×     '
+         $SBA  (4,49)
+         DC    X'2842F7'                  , Color white
+         DC    C' __      __ '
+         $SBA  (5,49)
+         DC    C'×××\    ///\'
+         $SBA  (6,49)
+         DC    C'××××   /// /'
+         $SBA  (7,49)
+         DC    C'××××  /// / '
+         $SBA  (8,49)
+         DC    C'×××× /// /  '
+         $SBA  (9,49)
+         DC    C'××××/// /   '
+         $SBA  (10,49)
+         DC    C'×××///_/    '
+         $SBA  (11,49)
+         DC    C'×××\\\ \    '
+         $SBA  (12,49)
+         DC    C'××××\\\ \   '
+         $SBA  (13,49)
+         DC    C'×××× \\\ \  '
+         $SBA  (14,49)
+         DC    C'××××  \\\_\ '
+         $SBA  (15,49)
+         DC    C'\__\   \___\'
+         $SBA  (4,64)
+         DC    X'2842F1'                  , Color blue
+         DC    C' ___________ '
+         $SBA  (5,64)
+         DC    C'××××××××××××\'
+         $SBA  (6,64)
+         DC    C'×××××××××××× ×'
+         $SBA  (7,64)
+         DC    C'××××\ ______\×'
+         $SBA  (8,64)
+         DC    C'×××× ×'
+         $SBA  (9,64)
+         DC    C'×××××××××× \'
+         $SBA  (10,64)
+         DC    C'××××××××××× \'
+         $SBA  (11,64)
+         DC    C'\_______×××× ×'
+         $SBA  (12,64)
+         DC    C'        ×××× ×'
+         $SBA  (13,64)
+         DC    C'×××××××××××× ×'
+         $SBA  (14,64)
+         DC    C'××××××××××× /'
+         $SBA  (15,64)
+         DC    C'\__________/'
+         DC    X'280000'                  , Reset SA
+         $SBA  (17,6)
+         $SF   (SKIP)
+         DC    C'TK3  created by Volker Bandke      volker@bandke.org'
+         $SF   (SKIP)
+         $SBA  (18,6)
+         $SF   (SKIP)
+         DC    C'TK4- update by Juergen Winkelmann  juergen.winkelmann@C
+               pebble-beach.ch'
+         $SBA  (18,76)
+         $SF   (SKIP)
+         $SBA  (19,6)
+         $SF   (SKIP)
+         DC    C'TK5  update by Rob Prins           prin0096@gmail.com'
+         $SBA  (19,60)
+         $SF   (SKIP)
+         $SBA  (20,11)
+         $SF   (SKIP)
+         DC    C'see SYS2.JCLLIB(CREDITS) for complete credits'
+         $SBA  (20,57)
+         $SF   (SKIP)
+         $SBA  (21,24)
+         $SF   (SKIP)
+         DC    C'MVS 3.8j Level 8505 - '
+         DC    X'2842F6'                  , Color yellow
+         DC    C'Update 5'
+         DC    X'280000'                  , Reset SA
+         $SBA  (22,80)
+         $SF   (SKIP,HI)
+         DC    C'Logon ===>'
+         $SBA  (23,11)
+         $SF   (UNPROT,HI)
+         $IC
+TK5MINP  DC    CL128' '
+         $SBA  (24,60)
+         $SF   (SKIP,HI)
+         DC    C'RUNNING  TK5'
+         $SBA  (24,76)
+         $SF   (SKIP,HI)
+         $SBA  (24,80)
+         $SF   (SKIP,HI)
+TK5MLOGL EQU   *-TK5MLOG
+         POP   PRINT

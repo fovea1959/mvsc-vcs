@@ -1,0 +1,13 @@
+//ASKOPER$  JOB (001),'BUILD ASK OPERATOR',CLASS=A,MSGCLASS=X
+//*-----------------------------------------------------------------*
+//*        INSTALL  'ASK OPERATOR'
+//*-----------------------------------------------------------------*
+//ASKOPER  EXEC ASMFCL,COND=(0,NE),
+//         PARM.ASM='ALIGN,NOLIST,OBJ,NODECK'
+//SYSTERM  DD SYSOUT=*
+//SYSIN    DD DSN=CBT328.FILE316.PDS(ASKOPER),DISP=SHR,
+//            VOL=SER=CBT328,UNIT=SYSDA
+//LKED.SYSLMOD DD DSN=SYSD.LINKLIB,DISP=SHR
+//LKED.SYSIN DD *
+ NAME ASKOPER(R)
+/*
