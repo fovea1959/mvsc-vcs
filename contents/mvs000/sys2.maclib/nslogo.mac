@@ -1,207 +1,352 @@
-* >>>>>>>>>>>>>>>>>>>>>> Sample Screen Layout <<<<<<<<<<<<<<<<<<<<<<<<
 *
-* ----+----1----5----2----+----3----+----4----+----5----+----6----+---
-* Terminal                                                          Dat
-*                                                                   Tim
+* MFSCREEN - IBM SYSTEM/370 LOGON PANEL, 24 X 80, 3270 STREAM
 *
-*                            TTTTTTTTTTTT   KKKK  KKKKK   555555555555
-*                            TT   TT   TT    KK    KK     55
-*                            TT   TT   TT    KK   KK      55
-*                                 TT         KK  KK       55
-*         ×l      _,,,---,,_      TT         KK KK        55
-*  ZZZzz /,'.-'`'    -.  ;-;;,    TT         KKKK         55555555555
-*       ×,4-  ) )-,_. ,( (  ''-'  TT         KKKKK                  55
-*      '---''(_/--'  `-')_)       TT         KK  KK                 55
-*                                 TT         KK   KK                55
-*        The MVS 3.8j             TT         KK    KK               55
-*      Tur(n)key System           TT         KK     KK              55
-*                               TTTTTT      KKKK     KKK  55555555555
+* ESC + ERASE/WRITE ALTERNATE + WCC + ORDERS, FOR TPUT FULLSCR.
+* ROW 1 IS THE TITLE LINE, ROWS 2-23 ARE THREE CABINETS (TAPE, CPU,
+* DISK), ROW 24 IS THE LOGON PROMPT.
 *
-* TK3 created by Volker Bandke       volker@bandke.org
-* TK4- update by Juergen Winkelmann  juergen.winkelmann@pebble-beach.ch
-* TK5  update by Rob Prins           prin0096@gmail.com
-*      see SYS2.JCLLIB(CREDITS) for complete credits
-*                  MVS 3.8j Level 8505 - Update 5
+* USES THE EXISTING MACROS $ESC, $WCC, $SBA AND $SF, PLUS $SFE
+* (MEMBER $SFE IN MFMACS) FOR THE EXTENDED ATTRIBUTES.
+*   $SFE (ATTRS),HILITE=,COLOR=
+*   ATTRS   SAME WORDS AS $SF; DEFAULT UNPROT,ALPHA,NOMDT, NORMAL
+*   HILITE  NORMAL BLINK REVERSE UNDERSCORE
+*   COLOR   DEFAULT BLUE RED PINK GREEN TURQ YELLOW WHITE
 *
-* Logon ===>
-*                                                             RUNNING
-         PUSH  PRINT
-         PRINT OFF
-LOGOLOG  DS    0D
-LOGOW    $WCC  (RESETKBD,MDT)
+* LAYOUT (COLUMNS): TAPE 2-25, CPU 27-54, DISK 56-79.
+* COLORS: YELLOW = TAPE AND DISK MECHANICS, TURQUOISE = CPU PANEL,
+* GREEN/RED/BLUE = LAMPS, REVERSE-VIDEO BUTTONS. ONE CPU LAMP BLINKS.
+* A COLOR ATTRIBUTE BYTE TAKES THE PLACE OF A BLANK NEXT TO THE
+* COLORED TEXT, SO COLORING NEVER CHANGES THE LAYOUT.
+* LOGOxxxx LABELS ARE 8- OR 4-BYTE READ-ONLY FIELDS: FILL BEFORE TPUT.
+*
+SCREEN   DS    0H
+         $ESC
+         DC    X'7E'                ERASE/WRITE ALTERNATE
+         $WCC  (RESETKBD,MDT)
+*
+* ROW 1 - TITLE PLUS LOGODEV (LABELED), LOGODATE AND LOGOTIME.
+*         ALL THREE ARE 8-BYTE HIGHLIGHTED READ-ONLY FIELDS; FILL
+*         THEM BEFORE TPUT. EACH FIELD'S ATTRIBUTE BYTE SHOWS AS THE
+*         BLANK BEFORE IT, SO THE FIELDS NEED NO SEPARATORS.
          $SBA  (1,1)
-         DC    C'Terminal'
-         $SBA  (1,9)
-         $SF   (SKIP,HI)
-         $SBA  (1,11)
-         $SF   (SKIP,HI)
-LOGODEV  DC    CL8' '
-         $SBA  (1,20)
-         $SF   (SKIP,HI)
-         $SBA  (1,66)
-         $SF   (SKIP,HI)
-         DC    C'Date'
-         $SBA  (1,71)
-         $SF   (SKIP,HI)
-         $SBA  (1,72)
-         $SF   (SKIP,HI)
-LOGODATE DC    CL8' '
+         $SF   (PROT)
+         DC    C'==='
+         DC    C' IBM SYSTEM/370 '
+         DC    C'==========================='
+         DC    C' TERM'
+         $SF   (PROT,HI)
+LOGODEV  DC    CL8'TERM0001'
+         $SF   (PROT,HI)
+LOGODATE DC    CL8'MM/DD/YY'
+         $SF   (PROT,HI)
+LOGOTIME DC    CL8'HH:MM:SS'
+         $SF   (PROT)
+* ROW 2
          $SBA  (2,1)
-         $SF   (SKIP,HI)
-         $SBA  (2,66)
-         $SF   (SKIP,HI)
-         DC    C'Time'
-         $SBA  (2,72)
-         $SF   (SKIP,HI)
-LOGOTIME DC    CL8' '
-*------------------------------
+         DC    C' +======================+ +====================='
+         DC    C'=====+ +======================+ '
+* ROW 3
+         $SBA  (3,1)
+         DC    C' ',X'4F',C'  ::::::::::::::::::  ',X'4F',C' ',X'4F'
+         DC    C'    MODEL'
+         $SF   (PROT,HI)
+LOGOMODL DC    CL4'????'
+         DC    C' '
+LOGOMEM  DC    C'?????k'
+         $SF   (PROT)
+         DC    C'    '
+         DC    X'4F',C' ',X'4F',C'  ::::::::::::::::::  ',X'4F'
+         DC    C' '
+* ROW 4
          $SBA  (4,1)
-         $SF   (SKIP,HI)
-         DC    X'284301'
-         DC    C'ABCDEF'
+         DC    C' +----------------------+ +---------------------'
+         DC    C'-----+ +----------------------+ '
+* ROW 5
          $SBA  (5,1)
-         $SF   (SKIP,HI)
-         DC    X'08'
-         DC    C'A'
-         DC    X'08'
-         DC    C'F'
-*------------------------------
-         $SBA  (8,8)
-         $SF   (SKIP,HI)
-         DC    C'×l'
-         $SBA  (8,16)
-         $SF   (SKIP,HI)
-         DC    C'_,,,---,,_'
+         DC    C' ',X'4F',C'                      ',X'4F',C' ',X'4F'
+         DC    C'                          ',X'4F',C' ',X'4F'
+         DC    C'                      ',X'4F',C' '
+* ROW 6
+         $SBA  (6,1)
+         DC    C' ',X'4F'
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C' .-----. '
+         $SF   (PROT)
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C' .-----. '
+         $SF   (PROT)
+         DC    X'4F',C' ',X'4F',C' +----------------------+ ',X'4F'
+         DC    C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'.----------------.'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 7
+* Tape drive
+         $SBA  (7,1)
+         DC    C' ',X'4F'
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  .-.  )'
+         $SF   (PROT)
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  .-.  )'
+         $SF   (PROT)
+         DC    X'4F'
+*
+         DC    C' '
+* CPU
+         DC    X'4F',C' ',X'4F'
+         $SFE  (PROT),COLOR=PINK
+         DC    C' ',X'90',C' . ',X'90'
+         DC    C' ',X'90',C' . ',X'90',C' . ',X'90',C' ',X'90',C' .'
+         $SF   (PROT)
+         DC    X'4F',C' ',X'4F'
+*
+         DC    C' '
+* Disk Drive
+         DC    X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  .----------.  )'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 8
+* Tape drive
+         $SBA  (8,1)
+         DC    C' ',X'4F'
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'( ( o ) )'
+         $SF   (PROT)
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'( ( o ) )'
+         $SF   (PROT)
+         DC    X'4F'
+*
+         DC    C' '
+* CPU
+         DC    X'4F',C' ',X'4F'
+         $SFE  (PROT),COLOR=PINK
+         DC    C' . ',X'90',C' . .'
+         $SFE  (PROT),HILITE=BLINK,COLOR=PINK
+         DC    X'90'
+         $SFE  (PROT),COLOR=PINK
+         DC    X'90',C' . ',X'90',C' . ',X'90'
+         $SF   (PROT)
+         DC    X'4F',C' ',X'4F'
+*
+         DC    C' '
+* DISK
+         DC    X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'( (  .------.  ) )'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 9
+* Tape Drive
          $SBA  (9,1)
-         $SF   (SKIP,HI)
-         DC    C'ZZZzz /,''.-''`''    -.  ;-;;,'
-         $SBA  (10,6)
-         $SF   (SKIP,HI)
-         DC    C'×,4-  ) )-,_. ,( (  ''''-'''
-         $SBA  (11,5)
-         $SF   (SKIP,HI)
-         DC    C'''---''''(_/--''  `-'')_)'
-         $SBA  (13,8)
-         DC    X'2842F2'                  , Color red
-         DC    X'2845F6'                  , BG yellow
-         DC    C'The MVS 3.8j'
-         $SBA  (14,6)
-         DC    C'Tur(n)key system'
-         $SBA  (4,29)
-         DC    X'2842F2'                  , Color red
-         DC    C'  ______________  '
-         $SBA  (5,29)
-         DC    C' /××××××××××××××\ '
-         $SBA  (6,29)
-         DC    C'× ×××××××××××××× ×'
-         $SBA  (7,29)
-         DC    C'×/____/××××\ ___\×'
-         $SBA  (8,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (9,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (10,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (11,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (12,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (13,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (14,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (15,31)
-         DC    C'   ×/____\×     '
-         $SBA  (4,49)
-         DC    X'2842F7'                  , Color white
-         DC    C' __      __ '
-         $SBA  (5,49)
-         DC    C'×××\    ///\'
-         $SBA  (6,49)
-         DC    C'××××   /// /'
-         $SBA  (7,49)
-         DC    C'××××  /// / '
-         $SBA  (8,49)
-         DC    C'×××× /// /  '
-         $SBA  (9,49)
-         DC    C'××××/// /   '
-         $SBA  (10,49)
-         DC    C'×××///_/    '
-         $SBA  (11,49)
-         DC    C'×××\\\ \    '
-         $SBA  (12,49)
-         DC    C'××××\\\ \   '
-         $SBA  (13,49)
-         DC    C'×××× \\\ \  '
-         $SBA  (14,49)
-         DC    C'××××  \\\_\ '
-         $SBA  (15,49)
-         DC    C'\__\   \___\'
-         $SBA  (4,64)
-         DC    X'2842F1'                  , Color blue
-         DC    C' ___________ '
-         $SBA  (5,64)
-         DC    C'××××××××××××\'
-         $SBA  (6,64)
-         DC    C'×××××××××××× ×'
-         $SBA  (7,64)
-         DC    C'××××\ ______\×'
-         $SBA  (8,64)
-         DC    C'×××× ×'
-         $SBA  (9,64)
-         DC    C'×××××××××× \'
-         $SBA  (10,64)
-         DC    C'××××××××××× \'
-         $SBA  (11,64)
-         DC    C'\_______×××× ×'
-         $SBA  (12,64)
-         DC    C'        ×××× ×'
-         $SBA  (13,64)
-         DC    C'×××××××××××× ×'
-         $SBA  (14,64)
-         DC    C'××××××××××× /'
-         $SBA  (15,64)
-         DC    C'\__________/'
-         DC    X'280000'                  , Reset SA
-         $SBA  (17,6)
-         $SF   (SKIP)
-         DC    C'TK3  created by Volker Bandke      volker@bandke.org'
-         $SF   (SKIP)
-         $SBA  (18,6)
-         $SF   (SKIP)
-         DC    C'TK4- update by Juergen Winkelmann  juergen.winkelmann@C
-               pebble-beach.ch'
-         $SBA  (18,76)
-         $SF   (SKIP)
-         $SBA  (19,6)
-         $SF   (SKIP)
-         DC    C'TK5  update by Rob Prins           prin0096@gmail.com'
-         $SBA  (19,60)
-         $SF   (SKIP)
-         $SBA  (20,11)
-         $SF   (SKIP)
-         DC    C'see SYS2.JCLLIB(CREDITS) for complete credits'
-         $SBA  (20,57)
-         $SF   (SKIP)
-         $SBA  (21,24)
-         $SF   (SKIP)
-         DC    C'MVS 3.8j Level 8505 - '
-         DC    X'2842F6'                  , Color yellow
-         DC    C'Update 5'
-         DC    X'280000'                  , Reset SA
-         $SBA  (22,80)
-         $SF   (SKIP,HI)
-         DC    C'Logon ===>'
-         $SBA  (23,11)
-         $SF   (UNPROT,HI)
-         $IC
-LOGOINP  DC    CL128' '
-         $SBA  (24,60)
-         $SF   (SKIP,HI)
-         DC    C'RUNNING  TK5'
-         $SBA  (24,76)
-         $SF   (SKIP,HI)
+         DC    C' ',X'4F'
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  +-+  )'
+         $SF   (PROT)
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  +-+  )'
+         $SF   (PROT)
+         DC    X'4F'
+*
+         DC    C' '
+* CPU
+         DC    X'4F',C' ',X'4F'
+         $SFE  (PROT),COLOR=PINK
+         DC    C' ',X'90',C' ',X'90'
+         DC    C' . ',X'90',C' . . ',X'90',C' ',X'90',C' . .'
+         $SF   (PROT)
+         DC    X'4F'
+*
+         DC    C' '
+* Disk drive
+         DC    X'4F',C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'( ( ( ( () ) ) ) )'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 10
+* Tape drive
+         $SBA  (10,1)
+         DC    C' ',X'4F'
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C' +-----+ '
+         $SF   (PROT)
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C' +-----+ '
+         $SF   (PROT)
+         DC    X'4F'
+*
+         DC    C' '
+* CPU cabinet
+         DC    X'4F',C' ',X'4F'
+         $SFE  (PROT),COLOR=PINK
+         DC    C' . . ',X'90',C' . ',X'90'
+         DC    C' ',X'90',C' . . ',X'90',C' ',X'90'
+         $SF   (PROT)
+         DC    X'4F',C' ',X'4F'
+*
+         DC    C' '
+* Disk
+         DC    X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'( (  +------+  ) )'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 11
+         $SBA  (11,1)
+         DC    C' ',X'4F',C'                      ',X'4F',C' ',X'4F'
+         DC    C' +----------------------+ ',X'4F',C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'(  +----------+  )'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 12
+         $SBA  (12,1)
+         DC    C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'=================='
+         $SF   (PROT)
+         DC    C' ',X'4F',C' ',X'4F',C'                          '
+         DC    X'4F',C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'+----------------+'
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 13
+         $SBA  (13,1)
+         DC    C' ',X'4F',C'    +------------+    ',X'4F',C' ',X'4F'
+         DC    C'   '
+         $SFE  (PROT),COLOR=TURQ
+         DC    C'(/) (/) (/) (/) (/)'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'=================='
+         $SF   (PROT)
+         DC    C' ',X'4F',C' '
+* ROW 14
+         $SBA  (14,1)
+         DC    C' ',X'4F',C'    ',X'4F',C'  R/W HEAD  ',X'4F',C'    '
+         DC    X'4F',C' ',X'4F',C'                          ',X'4F'
+         DC    C' ',X'4F',C'                      ',X'4F',C' '
+* ROW 15
+         $SBA  (15,1)
+         DC    C' ',X'4F',C'    +------------+    ',X'4F',C' ',X'4F'
+         DC    C'  '
+         $SFE  (PROT),COLOR=TURQ
+         DC    C'+------------------+'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C' (O) (O) (O) (O) (O)  ',X'4F'
+         DC    C' '
+* ROW 16
+         $SBA  (16,1)
+         DC    C' ',X'4F',C'                      ',X'4F',C' ',X'4F'
+         DC    C'  '
+         $SFE  (PROT),COLOR=TURQ
+         DC    X'4F'
+         DC    C' MVS'
+         $SF   (PROT,HI)
+LOGORLSE DC    CL4'????'
+         $SFE  (PROT),COLOR=TURQ
+         DC    C'ID'
+         $SF   (PROT,HI)
+LOGOID   DC    CL4'????'
+         $SFE  (PROT),COLOR=TURQ
+         DC    X'4F'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C'                      ',X'4F'
+         DC    C' '
+* ROW 17
+         $SBA  (17,1)
+         DC    C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=YELLOW
+         DC    C'O O O O O O O O O'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C'  '
+         $SFE  (PROT),COLOR=TURQ
+         DC    C'+------------------+'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C'                      ',X'4F'
+         DC    C' '
+* ROW 18
+         $SBA  (18,1)
+         DC    C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=GREEN
+         DC    X'90'
+         $SF   (PROT)
+         DC    C'RDY '
+         $SFE  (PROT),COLOR=RED
+         DC    X'90'
+         $SF   (PROT)
+         DC    C'CHK  ',X'90',C' PRT ',X'4F',C' ',X'4F'
+         DC    C'                          ',X'4F',C' ',X'4F',C' '
+         $SFE  (PROT),COLOR=GREEN
+         DC    X'90'
+         $SF   (PROT)
+         DC    C'RDY '
+         $SFE  (PROT),COLOR=RED
+         DC    X'90'
+         $SF   (PROT)
+         DC    C'CHK  ',X'90',C' SEL ',X'4F',C' '
+* ROW 19
+         $SBA  (19,1)
+         DC    C' +----------------------+ +---------------------'
+         DC    C'-----+ +----------------------+ '
+* ROW 20
+         $SBA  (20,1)
+         DC    C' ',X'4F',C'  '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=GREEN
+         DC    C'ON-LINE'
+         $SF   (PROT)
+         DC    C' '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=BLUE
+         DC    C'REWIND'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' ',X'4F',C'     '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=GREEN
+         DC    C'LOAD'
+         $SF   (PROT)
+         DC    C'   '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=RED
+         DC    C'RESET'
+         $SF   (PROT)
+         DC    C'     ',X'4F',C' ',X'4F',C'   '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=GREEN
+         DC    C'START'
+         $SF   (PROT)
+         DC    C'    '
+         $SFE  (PROT),HILITE=REVERSE,COLOR=RED
+         DC    C'STOP'
+         $SF   (PROT)
+         DC    C'  ',X'4F',C' '
+* ROW 21
+         $SBA  (21,1)
+         DC    C' ',X'4F',C'                      ',X'4F',C' ',X'4F'
+         DC    C' ',X'6A5F6A5F6A5F6A5F6A5F6A5F6A5F6A5F6A5F6A5F6A5F6A5F'
+         DC    C' ',X'4F',C' ',X'4F',C'                      ',X'4F'
+         DC    C' '
+* ROW 22
+         $SBA  (22,1)
+         DC    C' ',X'4F',C'  ::::::::::::::::::  ',X'4F',C' ',X'4F'
+         DC    C'  ::::::::::::::::::::::  ',X'4F',C' ',X'4F'
+         DC    C'  ::::::::::::::::::  ',X'4F',C' '
+* ROW 23
+         $SBA  (23,1)
+         DC    C' +======================+ +====================='
+         DC    C'=====+ +======================+ '
+* ROW 24 - LOGON PROMPT: PROTECTED LABEL, UNDERSCORED INPUT FIELD
+*          COLS 14-79, ENDED BY A PROTECTED ATTRIBUTE AT COL 80.
+*          CURSOR GOES TO THE FIELD START.
+         $SBA  (24,1)
+         $SF   (PROT,HI)
+         DC    C'LOGON ===> '
+         $SFE  (UNPROT),HILITE=UNDERSCORE
          $SBA  (24,80)
-         $SF   (SKIP,HI)
-LOGOLOGL EQU   *-LOGOLOG
-         POP   PRINT
+         $SF   (PROT)
+         $SBA  (24,14)
+         DC    X'13'                INSERT CURSOR
+SCRLEN   EQU   *-SCREEN

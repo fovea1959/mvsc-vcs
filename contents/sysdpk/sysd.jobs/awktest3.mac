@@ -1,0 +1,8 @@
+//AWKTEST  JOB 01,'TEST AWK',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//        EXEC PGM=ASCII2,REGION=6144K,PARM='›ª³!×'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//SYSIN     DD DUMMY
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*

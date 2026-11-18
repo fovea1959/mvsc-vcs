@@ -1,0 +1,54 @@
+         EJECT
+*        ENTRY: R3 -> 4-BYTE SMF ID FIELD
+*               R4 -> 4-BYTE MVS RELEASE FIELD
+*               R5 -> 4-BYTE CPU MODEL FIELD
+SYSINFO  STM   14,12,12(13)
+         BALR  12,0
+         USING *,12
+         GETMAIN R,LV=SWORKAL
+         LR    6,1
+         USING SWORKA,6
+         ST    13,SAVE+4
+         ST    6,8(,13)
+         LR    13,6
+         L     7,16(0,0)           R7 = CVT
+*
+*        SMF ID: SMCA AT CVT+X'C4', SID AT SMCA+X'10'
+*
+         L     8,196(,7)
+         LTR   8,8
+         BZ    NOSMCA
+         MVC   0(4,3),16(8)
+         B     DOREL
+NOSMCA   MVC   0(4,3),UNKNOWN
+*
+*        MVS RELEASE: 4 BYTES AT CVT-4
+*
+DOREL    LR    8,7
+         SH    8,H4
+         MVC   0(4,4),0(8)
+*
+*        CPU MODEL: 2 BYTES AT CVT-6, UNPACKED
+*
+         LR    8,7
+         SH    8,H6
+         UNPK  CPUTMP(5),0(3,8)
+         MVC   0(4,5),CPUTMP
+*
+*        RETURN
+*
+         LR    2,13
+         L     13,SAVE+4
+         FREEMAIN R,LV=SWORKAL,A=(2)
+         LM    14,12,12(13)
+         SR    15,15
+         BR    14
+*
+UNKNOWN  DC    C'????'
+H4       DC    H'4'
+H6       DC    H'6'
+*
+SWORKA   DSECT
+SAVE     DS    18F
+CPUTMP   DS    CL5
+SWORKAL  EQU   *-SWORKA

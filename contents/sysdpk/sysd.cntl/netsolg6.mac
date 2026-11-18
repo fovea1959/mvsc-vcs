@@ -1,0 +1,214 @@
+//NSLOGO   JOB  (SETUP),
+//             'Build Netsol',
+//             CLASS=A,
+//             MSGCLASS=X,
+//             MSGLEVEL=(1,1),
+//             COND=(0,NE),
+//             NOTIFY=&SYSUID
+//********************************************************************
+//CLEANUP EXEC PGM=IDCAMS
+//SYSPRINT DD  SYSOUT=*
+//SYSIN    DD  *
+ DELETE SYS2.MACLIB(NSLOGO)
+ SET MAXCC=0
+ SET LASTCC=0
+//********************************************************************
+//COMP    EXEC COMPRESS,LIB='SYS2.MACLIB'
+//********************************************************************
+//COPY    EXEC PGM=IEBCOPY
+//SYSPRINT DD  SYSOUT=*
+//AMACLIB  DD  DISP=SHR,DSN=SYS1.AMACLIB
+//MACLIB   DD  DISP=SHR,DSN=SYS2.MACLIB
+//DMACLIB  DD  DISP=SHR,DSN=SYSD.MACLIB
+//SYSIN    DD  *
+ COPY INDD=AMACLIB,OUTDD=MACLIB
+ SELECT MEMBER=((NETSOL,,R))
+ COPY INDD=DMACLIB,OUTDD=MACLIB
+ SELECT MEMBER=((NSLOGO,,R),($SFE,,R))
+//********************************************************************
+//UPDATE  EXEC PGM=IEBUPDTE
+//SYSPRINT DD  SYSOUT=*
+//SYSUT1   DD  DISP=SHR,DSN=SYS2.MACLIB
+//SYSUT2   DD  DISP=SHR,DSN=SYS2.MACLIB
+//SYSIN    DD  *
+./ CHANGE NAME=NETSOL
+         CLI   MSGINDEX,X'0C'             , is this msg to be shown?
+         BNE   NOUSS                      , bif not
+*                                         , update logo screen
+         LA    R15,DATETIME               , call DATETIME ..
+         LA    R3,LOGODATE                , .. to fill date and ..
+         LA    R4,LOGOTIME                , .. time fields ..
+         BALR  R14,R15                    , .. on the logo screen
+         MVC   SYNARG(FOUR),CID           , get CID into SYNCHRPL
+         OI    MFLAGS2,INQUIRE            , indicate INQUIRE
+         OI    MACFLAGS,INQCIDX           , indicate INQ CIDXLATE
+         NI    SRPLEXT1,FF-RPLNIB         , synch RPL has CID in
+*                                         ,  ARG field
+       INQUIRE RPL=SYNCHRPL,              , get terminal name          *
+               OPTCD=CIDXLATE,            ,  from CID and put          *
+               AREA=LOGODEV,              ,  it on the logo screen     *
+               AREALEN=D8
+         NI    MFLAGS2,FF-INQUIRE         , INQUIRE is done
+*                                         , Now write the screen
+         LA    R3,LOGOLOGL                , load length of screen data
+         L     R4,=A(LOGOLOG)             , load address of screen data
+         WRITE RPL=(PTRRPL),              , send data                  X
+               OPTCD=(LBT,ERASE),         , erase screen first         X
+               AREA=(R4),                 , address is in R4           X
+               RECLEN=(R3),               , length is in R3            X
+               EXIT=WRITEND
+         B     USSOK                      , continue normal processing
+NOUSS    DS    0H                         , issue netsol message <> 12
+USSOK    DS    0H                         , logon screen has been sent
+LOGOLOG  DS    0D
+         COPY  NSLOGO                     , logon screen copy book
+LOGOLOGL EQU   *-LOGOLOG
+DATETIME DS    0H              adapted from Jim Morrison's U370DATE
+         STM   R14,R12,12(R13) save registers
+         LR    R12,R15         establish ..
+         USING DATETIME,R12               .. addressability
+         GETMAIN RU,LV=LWORKA   get savearea storage
+         ST    R13,4(,R1)       chain the ..
+         ST    R1,8(,R13)                  .. saveareas
+         LR    R13,R1           establish own savearea
+         MVC   72(LWORKA-72,R13),WORKAREA+72 copy workarea ..
+         USING WORKAREA,R13     .. and establish addressability
+         LR    R9,R3            remember address of date field on logo
+         TIME  DEC              get system date and time packed decimal
+*----------------------------------------------------------------------
+*  Convert HHMMSSth, YYYY to EBCDIC
+*----------------------------------------------------------------------
+         STM   R0,R1,SAARG             store packed decimal date & time
+         AP    SAARG+4(4),P19          Y2K: add S/370 epoch century
+         UNPK  SACHR,SAARG             packed to EBCDIC
+         OI    SACHRX,X'F0'            repair sign
+*----------------------------------------------------------------------
+*  Convert year to binary
+*----------------------------------------------------------------------
+         L     R3,SAARG+4              Y2K: YYYYDDDF
+         SRL   R3,16-4                 000YYYY.
+         ST    R3,SAPAKY
+         OI    SAPAKY+3,X'0F'          packed year
+         CVB   R3,SADWD
+         ST    R3,SABINY               binary year
+*----------------------------------------------------------------------
+*  Select month table
+*----------------------------------------------------------------------
+         LA    R8,NOTLEAP              not a leap year
+         TM    SABINY+3,X'03'          divisible by 4?
+         BC    5,CALCMON               no, can't be leap year
+         SLR   R6,R6
+         LA    R10,400                 divisible by 400 is leap year
+         LR    R7,R3
+         DR    R6,R10
+         LTR   R6,R6
+         BZ    SETLEAP                 evenly divisible
+         XR    R6,R6
+         LA    R10,100                 divisible by 100 not leap year
+         LR    R7,R3
+         DR    R6,R10
+         LTR   R6,R6
+         BZ    CALCMON                 evenly divisible
+SETLEAP  LA    R8,LEAP                 leap year
+*----------------------------------------------------------------------
+*  Find month & month day, given Julian days DDD in year
+*----------------------------------------------------------------------
+CALCMON  DS    0H                      R8 @ month table
+         LH    R0,SAPAKDDD             DDDF
+         STH   R0,SAPAKD
+         CVB   R5,SADWD2
+         ST    R5,SABIND               binary ddd
+*
+         LA    R1,1
+         SLR   R14,R14                 month minus one
+         SLR   R15,R15
+SCANMON  IC    R15,0(R14,R8)           # days in month
+         CR    R5,R15                  too many?
+         BNH   SETMON                  no, br; now know month
+         SR    R5,R15                  reduce ddd
+         AR    R14,R1                  bump month
+         B     SCANMON
+SETMON   DS    0H
+         LA    R1,100                  decimal shift factor
+         SLR   R6,R6
+         LA    R7,1(,R14)              month
+         MR    R6,R1
+         AR    R7,R5                   binary month, day of month
+         CVD   R7,SADWD3               decimal: 0000 0000 000M MDDF
+         OI    SAPAKMDX,X'0F'          assure reasonable sign
+         UNPK  SACHRMD,SAPAKMD         MMDD to EBCDIC
+*----------------------------------------------------------------------
+*  Return data to caller
+*----------------------------------------------------------------------
+         MVC   0(2,R9),SARESULT+14 DD  R9 holds address of logo date
+         MVI   2(R9),C'.'
+         MVC   3(2,R9),SARESULT+12 MM
+         MVI   5(R9),C'.'
+         MVC   6(2,R9),SARESULT+10 YY
+         MVC   0(2,R4),SARESULT+0  HH  R4 holds address of logo time
+         MVI   2(R4),C':'
+         MVC   3(2,R4),SARESULT+2  MM
+         MVI   5(R4),C':'
+         MVC   6(2,R4),SARESULT+4  SS
+         LR    R1,R13           get own savearea address
+         L     R13,4(,R13)      restore caller's savearea address
+         FREEMAIN RU,A=(R1),LV=LWORKA free savearea storage
+         LM    R14,R12,12(R13)  restore caller's regs
+         SLR   R15,R15          set return code of zero
+         BR    R14              return to caller
+*                  J  F  M  A  M  J  J  A  S  O  N  D
+NOTLEAP  DC    AL1(31,28,31,30,31,30,31,31,30,31,30,31)
+LEAP     DC    AL1(31,29,31,30,31,30,31,31,30,31,30,31)
+P19      DC    P'1900000'              packed EPOCH
+WORKAREA DS    0F                      working storage for DATETIME
+         DS    18F                     DATETIME's save area
+SADWD    DS    D                       year
+SABINY   EQU   SADWD+0,4               binary
+SAPAKY   EQU   SADWD+4,4               packed 000Y,YYYF
+*
+SADWD2   DS    D                       julian day of year
+SABIND   EQU   SADWD2+0,4              binary
+SAPAKD   EQU   SADWD2+6,2              packed DDDF
+*
+SADWD3   DS    D                       gregorian month, day of month
+SABINMD  EQU   SADWD3+0,4              binary 0000MMDD
+SAPAKMD  EQU   SADWD3+5,3              packed   0MMDDF
+SAPAKMDX EQU   *-1,1                   sign repair
+*
+SAARG    DS    D                       HHMMSSth,YYYYDDDF
+SAPAKDDD EQU   SAARG+6,2              +0 1 2 3  4 5 6 7
+*
+SARESULT DS    0CL16                   nearly final result
+SACHR    DS    0CL15
+SACHRTM  DS    C'HHMMSSth'
+SACHRY   DS    C'19YY'
+SACHRD   DS    C'DDD'
+SACHRX   EQU   *-1,1                   sign repair
+         DS    C' '
+SACHRMD  EQU   SACHRD,4                C'MMDD'
+         DS    0D                      align
+LWORKA   EQU  *-WORKAREA
+//********************************************************************
+//ASM     EXEC PGM=IFOX00,REGION=1024K,PARM='LIST'
+//SYSLIB   DD  DISP=SHR,DSN=SYS2.MACLIB,DCB=LRECL=32720
+//         DD  DISP=SHR,DSN=SYS1.MACLIB
+//         DD  DISP=SHR,DSN=SYS1.AMODGEN
+//SYSUT1   DD  UNIT=VIO,SPACE=(1700,(600,100))
+//SYSUT2   DD  UNIT=VIO,SPACE=(1700,(300,50))
+//SYSUT3   DD  UNIT=VIO,SPACE=(1700,(300,50))
+//SYSPRINT DD  SYSOUT=*,DCB=BLKSIZE=1089
+//SYSPUNCH DD  DISP=(NEW,PASS,DELETE),
+//             UNIT=VIO,SPACE=(TRK,(2,2)),
+//             DCB=(BLKSIZE=80,LRECL=80,RECFM=F)
+//SYSIN    DD  *
+ISTNSC00 CSECT ,
+         NETSOL SYSTEM=VS2
+         END   ,
+//********************************************************************
+//LKED    EXEC PGM=IEWL,PARM='XREF,LIST,LET,NCAL',REGION=1024K
+//SYSPRINT DD  SYSOUT=*
+//SYSLIN   DD  DISP=(OLD,DELETE,DELETE),DSN=*.ASM.SYSPUNCH
+//SYSLMOD  DD  DISP=SHR,DSN=SYS1.VTAMLIB(ISTNSC00)
+//SYSUT1   DD  UNIT=VIO,SPACE=(1024,(200,20))
+//*
+//

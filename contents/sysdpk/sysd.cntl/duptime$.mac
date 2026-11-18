@@ -1,0 +1,28 @@
+//HERC01X  JOB  (HERC01),
+//             'MODIFY QEDIT EX ',
+//             CLASS=A,
+//             MSGCLASS=X,COND=(4,LT),
+//             REGION=4M,NOTIFY=&SYSUID,
+//             MSGLEVEL=(1,1)
+//*--------------------------------------------------------------------
+//* NOTES:      STANDARD ASSEBLER JCL MVS 3.8J
+//*--------------------------------------------------------------------
+//*           ASM JCL - ASSEMBLE AND LINK
+//*          HERC01.TEST.CNTL.CBT134(DUPTIME)
+//*-------------------------------------------------------------------
+//ASMFCL  EXEC ASMFCL,PARM.ASM='OBJECT,NODECK,LIST,XREF',
+//             MAC='SYS1.MACLIB',
+//             MAC1='SYS1.AMODGEN',
+//             PARM.LKED='XREF,LET,LIST,AC=1'
+//ASM.SYSIN DD DSN=SYSD.CBT.FILE134(DUPTIME),DISP=SHR
+//LKED.SYSLMOD DD DISP=SHR,DSN=SYS2.CMDLIB(DUPTIME)
+//LKED.SYSIN DD *
+  NAME DUPTIME(R)
+//*----------------------------------------------------------
+//*   STEP TO RUN THE NEWLY ASSEBLED AND LINKED PROGRAM
+//*----------------------------------------------------------
+//ASMXXXXX  EXEC PGM=DUPTIME
+//STEPLIB  DD DISP=SHR,DSN=SYS2.CMDLIB
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=*
+//*----------------------------------------------------------

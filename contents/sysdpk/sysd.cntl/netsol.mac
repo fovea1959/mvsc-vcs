@@ -6,240 +6,21 @@
 //             COND=(0,NE),
 //             NOTIFY=&SYSUID
 //********************************************************************
-//*
-//* Name: TK5.CNTL(TK5$LOGO)
-//* Last Update: 2026/02/15 10:56
-//*
-//* Desc: Build new NETSOL logon screen with 3D TK5 logo
-//*
-//********************************************************************
-//CLEANUP EXEC PGM=IDCAMS
-//SYSPRINT DD  SYSOUT=*
-//SYSIN    DD  *
- DELETE SYS2.MACLIB(NSLOGO)
- SET MAXCC=0
- SET LASTCC=0
 //COMP    EXEC COMPRESS,LIB='SYS2.MACLIB'
+//********************************************************************
 //COPY    EXEC PGM=IEBCOPY
+//SYSPRINT DD  SYSOUT=*
+//MACLIB   DD  DISP=SHR,DSN=SYS2.MACLIB
+//DMACLIB  DD  DISP=SHR,DSN=SYSD.MACLIB
+//SYSIN    DD  *
+ COPY INDD=DMACLIB,OUTDD=MACLIB
+ SELECT MEMBER=((NSLOGO,,R),($SFE,,R))
+//********************************************************************
+//UPDATE  EXEC PGM=IEBUPDTE
 //SYSPRINT DD  SYSOUT=*
 //SYSUT1   DD  DISP=SHR,DSN=SYS1.AMACLIB
 //SYSUT2   DD  DISP=SHR,DSN=SYS2.MACLIB
 //SYSIN    DD  *
- COPY INDD=SYSUT1,OUTDD=SYSUT2
- SELECT MEMBER=((NETSOL,,R))
-//UPDATE  EXEC PGM=IEBUPDTE
-//SYSPRINT DD  SYSOUT=*
-//SYSUT1   DD  DISP=SHR,DSN=SYS2.MACLIB
-//SYSUT2   DD  DISP=SHR,DSN=SYS2.MACLIB
-//SYSIN    DD  *
-./ ADD NAME=NSLOGO
-* >>>>>>>>>>>>>>>>>>>>>> Sample Screen Layout <<<<<<<<<<<<<<<<<<<<<<<<
-*
-* ----+----1----5----2----+----3----+----4----+----5----+----6----+---
-* Terminal                                                          Dat
-*                                                                   Tim
-*
-*                            TTTTTTTTTTTT   KKKK  KKKKK   555555555555
-*                            TT   TT   TT    KK    KK     55
-*                            TT   TT   TT    KK   KK      55
-*                                 TT         KK  KK       55
-*         ×l      _,,,---,,_      TT         KK KK        55
-*  ZZZzz /,'.-'`'    -.  ;-;;,    TT         KKKK         55555555555
-*       ×,4-  ) )-,_. ,( (  ''-'  TT         KKKKK                  55
-*      '---''(_/--'  `-')_)       TT         KK  KK                 55
-*                                 TT         KK   KK                55
-*        The MVS 3.8j             TT         KK    KK               55
-*      Tur(n)key System           TT         KK     KK              55
-*                               TTTTTT      KKKK     KKK  55555555555
-*
-* TK3 created by Volker Bandke       volker@bandke.org
-* TK4- update by Juergen Winkelmann  juergen.winkelmann@pebble-beach.ch
-* TK5  update by Rob Prins           prin0096@gmail.com
-*      see SYS2.JCLLIB(CREDITS) for complete credits
-*                  MVS 3.8j Level 8505 - Update 5
-*
-* Logon ===>
-*                                                             RUNNING
-         PUSH  PRINT
-         PRINT OFF
-LOGOLOG  DS    0D
-LOGOW    $WCC  (RESETKBD,MDT)
-         $SBA  (1,1)
-         DC    C'Terminal'
-         $SBA  (1,9)
-         $SF   (SKIP,HI)
-         $SBA  (1,11)
-         $SF   (SKIP,HI)
-LOGODEV  DC    CL8' '
-         $SBA  (1,20)
-         $SF   (SKIP,HI)
-         $SBA  (1,66)
-         $SF   (SKIP,HI)
-         DC    C'Date'
-         $SBA  (1,71)
-         $SF   (SKIP,HI)
-         $SBA  (1,72)
-         $SF   (SKIP,HI)
-LOGODATE DC    CL8' '
-         $SBA  (2,1)
-         $SF   (SKIP,HI)
-         $SBA  (2,66)
-         $SF   (SKIP,HI)
-         DC    C'Time'
-         $SBA  (2,72)
-         $SF   (SKIP,HI)
-LOGOTIME DC    CL8' '
-*------------------------------
-         $SBA  (4,1)
-         $SF   (SKIP,HI)
-         DC    X'284301'
-         DC    C'ABCDEF'
-         $SBA  (5,1)
-         $SF   (SKIP,HI)
-         DC    X'08'
-         DC    C'A'
-         DC    X'08'
-         DC    C'F'
-*------------------------------
-         $SBA  (8,8)
-         $SF   (SKIP,HI)
-         DC    C'×l'
-         $SBA  (8,16)
-         $SF   (SKIP,HI)
-         DC    C'_,,,---,,_'
-         $SBA  (9,1)
-         $SF   (SKIP,HI)
-         DC    C'ZZZzz /,''.-''`''    -.  ;-;;,'
-         $SBA  (10,6)
-         $SF   (SKIP,HI)
-         DC    C'×,4-  ) )-,_. ,( (  ''''-'''
-         $SBA  (11,5)
-         $SF   (SKIP,HI)
-         DC    C'''---''''(_/--''  `-'')_)'
-         $SBA  (13,8)
-         DC    X'2842F2'                  , Color red
-         DC    X'2845F6'                  , BG yellow
-         DC    C'The MVS 3.8j'
-         $SBA  (14,6)
-         DC    C'Tur(n)key system'
-         $SBA  (4,29)
-         DC    X'2842F2'                  , Color red
-         DC    C'  ______________  '
-         $SBA  (5,29)
-         DC    C' /××××××××××××××\ '
-         $SBA  (6,29)
-         DC    C'× ×××××××××××××× ×'
-         $SBA  (7,29)
-         DC    C'×/____/××××\ ___\×'
-         $SBA  (8,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (9,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (10,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (11,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (12,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (13,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (14,31)
-         DC    C'   × ×××× ×     '
-         $SBA  (15,31)
-         DC    C'   ×/____\×     '
-         $SBA  (4,49)
-         DC    X'2842F7'                  , Color white
-         DC    C' __      __ '
-         $SBA  (5,49)
-         DC    C'×××\    ///\'
-         $SBA  (6,49)
-         DC    C'××××   /// /'
-         $SBA  (7,49)
-         DC    C'××××  /// / '
-         $SBA  (8,49)
-         DC    C'×××× /// /  '
-         $SBA  (9,49)
-         DC    C'××××/// /   '
-         $SBA  (10,49)
-         DC    C'×××///_/    '
-         $SBA  (11,49)
-         DC    C'×××\\\ \    '
-         $SBA  (12,49)
-         DC    C'××××\\\ \   '
-         $SBA  (13,49)
-         DC    C'×××× \\\ \  '
-         $SBA  (14,49)
-         DC    C'××××  \\\_\ '
-         $SBA  (15,49)
-         DC    C'\__\   \___\'
-         $SBA  (4,64)
-         DC    X'2842F1'                  , Color blue
-         DC    C' ___________ '
-         $SBA  (5,64)
-         DC    C'××××××××××××\'
-         $SBA  (6,64)
-         DC    C'×××××××××××× ×'
-         $SBA  (7,64)
-         DC    C'××××\ ______\×'
-         $SBA  (8,64)
-         DC    C'×××× ×'
-         $SBA  (9,64)
-         DC    C'×××××××××× \'
-         $SBA  (10,64)
-         DC    C'××××××××××× \'
-         $SBA  (11,64)
-         DC    C'\_______×××× ×'
-         $SBA  (12,64)
-         DC    C'        ×××× ×'
-         $SBA  (13,64)
-         DC    C'×××××××××××× ×'
-         $SBA  (14,64)
-         DC    C'××××××××××× /'
-         $SBA  (15,64)
-         DC    C'\__________/'
-         DC    X'280000'                  , Reset SA
-         $SBA  (17,6)
-         $SF   (SKIP)
-         DC    C'TK3  created by Volker Bandke      volker@bandke.org'
-         $SF   (SKIP)
-         $SBA  (18,6)
-         $SF   (SKIP)
-         DC    C'TK4- update by Juergen Winkelmann  juergen.winkelmann@C
-               pebble-beach.ch'
-         $SBA  (18,76)
-         $SF   (SKIP)
-         $SBA  (19,6)
-         $SF   (SKIP)
-         DC    C'TK5  update by Rob Prins           prin0096@gmail.com'
-         $SBA  (19,60)
-         $SF   (SKIP)
-         $SBA  (20,11)
-         $SF   (SKIP)
-         DC    C'see SYS2.JCLLIB(CREDITS) for complete credits'
-         $SBA  (20,57)
-         $SF   (SKIP)
-         $SBA  (21,24)
-         $SF   (SKIP)
-         DC    C'MVS 3.8j Level 8505 - '
-         DC    X'2842F6'                  , Color yellow
-         DC    C'Update 5'
-         DC    X'280000'                  , Reset SA
-         $SBA  (22,80)
-         $SF   (SKIP,HI)
-         DC    C'Logon ===>'
-         $SBA  (23,11)
-         $SF   (UNPROT,HI)
-         $IC
-LOGOINP  DC    CL128' '
-         $SBA  (24,60)
-         $SF   (SKIP,HI)
-         DC    C'RUNNING  TK5'
-         $SBA  (24,76)
-         $SF   (SKIP,HI)
-         $SBA  (24,80)
-         $SF   (SKIP,HI)
-LOGOLOGL EQU   *-LOGOLOG
-         POP   PRINT
 ./ CHANGE NAME=NETSOL
          CLI   MSGINDEX,X'0C'             , is this msg to be shown?
          BNE   NOUSS                      , bif not
@@ -248,6 +29,18 @@ LOGOLOGL EQU   *-LOGOLOG
          LA    R3,LOGODATE                , .. to fill date and ..
          LA    R4,LOGOTIME                , .. time fields ..
          BALR  R14,R15                    , .. on the logo screen
+         LA    R15,GETREL                 , call GETREL ..
+         LA    R3,LOGORLSE                ,
+         BALR  R14,R15                    ,
+         LA    R15,GETMDL                 , call GETMDL ..
+         LA    R3,LOGOMODL                ,
+         BALR  R14,R15                    ,
+         LA    R15,GETSMF                 , call GETSMF ..
+         LA    R3,LOGOID                  ,
+         BALR  R14,R15                    ,
+         LA    R15,GETMEM                 , call GETMEM ..
+         LA    R3,LOGOMEM                 ,
+         BALR  R14,R15                    ,
          MVC   SYNARG(FOUR),CID           , get CID into SYNCHRPL
          OI    MFLAGS2,INQUIRE            , indicate INQUIRE
          OI    MACFLAGS,INQCIDX           , indicate INQ CIDXLATE
@@ -269,7 +62,9 @@ LOGOLOGL EQU   *-LOGOLOG
          B     USSOK                      , continue normal processing
 NOUSS    DS    0H                         , issue netsol message <> 12
 USSOK    DS    0H                         , logon screen has been sent
-         COPY NSLOGO                      , logon screen copy book
+LOGOLOG  DS    0D
+         COPY  NSLOGO                     , logon screen copy book
+LOGOLOGL EQU   *-LOGOLOG
 DATETIME DS    0H              adapted from Jim Morrison's U370DATE
          STM   R14,R12,12(R13) save registers
          LR    R12,R15         establish ..
@@ -395,7 +190,102 @@ SACHRX   EQU   *-1,1                   sign repair
 SACHRMD  EQU   SACHRD,4                C'MMDD'
          DS    0D                      align
 LWORKA   EQU  *-WORKAREA
-//ASM     EXEC PGM=IFOX00,REGION=1024K
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR SMF ID
+GETSMF   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         L     R8,196(,R7)         R8 = SMCA
+         LTR   R8,R8
+         BZ    NOSMCA
+         MVC   0(4,R3),16(R8)      SMF ID AT SMCA+X'10'
+         B     EXIT
+NOSMCA   MVC   0(4,R3),UNKNOWN
+EXIT     LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+UNKNOWN  DC    C'????'
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR MVS RELEASE
+GETREL   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         LR    R8,R7
+         LA    R9,4
+         SR    R8,R9               R8 = CVT-4
+         MVC   0(4,R3),0(R8)
+         LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR CPU MODEL (EBCDIC DIGITS)
+GETMDL   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         LR    R8,R7
+         LA    R9,6
+         SR    R8,R9               R8 = CVT-6
+         LH    R5,0(,R8)           R5 = MODEL HALFWORD
+         LR    R4,R5
+         SRL   R4,12               DIGIT 1
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)         ADD X'F0' ZONE
+         STC   R4,0(,R3)
+         LR    R4,R5
+         SRL   R4,8                DIGIT 2
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,1(,R3)
+         LR    R4,R5
+         SRL   R4,4                DIGIT 3
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,2(,R3)
+         LR    R4,R5
+         SLL   R4,28               DIGIT 4
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,3(,R3)
+         LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+         EJECT
+*        ENTRY: R3 -> 6-BYTE FIELD FOR REAL STORAGE SIZE, E.G.
+*               '16384K'
+GETMEM   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R2,16(0,0)          R2 = CVT
+         USING CVTMAP,R2
+         L     R7,CVTRLSTG         R7 = REAL STORAGE IN KILOBYTES
+         DROP  R2
+         MVC   0(6,R3),BLANKS
+         MVI   5(R3),C'K'
+         LA    R4,4                R4 = INDEX OF NEXT DIGIT
+         LA    R9,10
+LOOP     SR    R6,R6               R6:R7 = DIVIDEND
+         DR    R6,R9               R7 = QUOTIENT, R6 = REMAINDER
+         LA    R6,240(,R6)         ADD X'F0' ZONE
+         STC   R6,0(R4,R3)
+         LTR   R7,R7
+         BZ    MEMDONE
+         BCTR  R4,0
+         LTR   R4,R4
+         BNM   LOOP
+MEMDONE  LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+BLANKS   DC    CL8' '
+*
+         CVT   DSECT=YES
+//********************************************************************
+//ASM     EXEC PGM=IFOX00,REGION=1024K,PARM='LIST'
 //SYSLIB   DD  DISP=SHR,DSN=SYS2.MACLIB,DCB=LRECL=32720
 //         DD  DISP=SHR,DSN=SYS1.MACLIB
 //         DD  DISP=SHR,DSN=SYS1.AMODGEN
@@ -410,6 +300,7 @@ LWORKA   EQU  *-WORKAREA
 ISTNSC00 CSECT ,
          NETSOL SYSTEM=VS2
          END   ,
+//********************************************************************
 //LKED    EXEC PGM=IEWL,PARM='XREF,LIST,LET,NCAL',REGION=1024K
 //SYSPRINT DD  SYSOUT=*
 //SYSLIN   DD  DISP=(OLD,DELETE,DELETE),DSN=*.ASM.SYSPUNCH

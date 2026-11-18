@@ -1,0 +1,13 @@
+//LISTCAT  JOB (WEGSCD),'LIST CATALOG',CLASS=A,MSGCLASS=X
+//*------------------------------------------------------------------*
+//ALL      EXEC PGM=IDCAMS
+//SYSPRINT  DD SYSOUT=*
+//SYSIN     DD *
+  LISTCAT ALL
+/*
+//*------------------------------------------------------------------*
+//NAME     EXEC PGM=IDCAMS
+//SYSPRINT  DD SYSOUT=*
+//SYSIN     DD *
+  LISTCAT NAME
+/*

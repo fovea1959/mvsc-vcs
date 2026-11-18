@@ -2339,6 +2339,18 @@ ERASWRIT EQU   *                                               @ZA13651
          LA    R3,LOGODATE                , .. to fill date and ..
          LA    R4,LOGOTIME                , .. time fields ..
          BALR  R14,R15                    , .. on the logo screen
+         LA    R15,GETREL                 , call GETREL ..
+         LA    R3,LOGORLSE                ,
+         BALR  R14,R15                    ,
+         LA    R15,GETMDL                 , call GETMDL ..
+         LA    R3,LOGOMODL                ,
+         BALR  R14,R15                    ,
+         LA    R15,GETSMF                 , call GETSMF ..
+         LA    R3,LOGOID                  ,
+         BALR  R14,R15                    ,
+         LA    R15,GETMEM                 , call GETMEM ..
+         LA    R3,LOGOMEM                 ,
+         BALR  R14,R15                    ,
          MVC   SYNARG(FOUR),CID           , get CID into SYNCHRPL
          OI    MFLAGS2,INQUIRE            , indicate INQUIRE
          OI    MACFLAGS,INQCIDX           , indicate INQ CIDXLATE
@@ -6861,7 +6873,9 @@ RPL&TABCONT DC    (ENDSECT-STSECT)X'00' ONE RPL WORK AREA      @VS49571
 .MSGS    ANOP
 .*
 .*
-         COPY NSLOGO                      , logon screen copy book
+LOGOLOG  DS    0D
+         COPY  NSLOGO                     , logon screen copy book
+LOGOLOGL EQU   *-LOGOLOG
          TITLE 'MSGCSECT - MESSAGE CONTROL SECTION'
          SPACE 2
 MSGCSECT CSECT
@@ -7032,4 +7046,98 @@ SACHRX   EQU   *-1,1                   sign repair
 SACHRMD  EQU   SACHRD,4                C'MMDD'
          DS    0D                      align
 LWORKA   EQU  *-WORKAREA
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR SMF ID
+GETSMF   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         L     R8,196(,R7)         R8 = SMCA
+         LTR   R8,R8
+         BZ    NOSMCA
+         MVC   0(4,R3),16(R8)      SMF ID AT SMCA+X'10'
+         B     EXIT
+NOSMCA   MVC   0(4,R3),UNKNOWN
+EXIT     LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+UNKNOWN  DC    C'????'
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR MVS RELEASE
+GETREL   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         LR    R8,R7
+         LA    R9,4
+         SR    R8,R9               R8 = CVT-4
+         MVC   0(4,R3),0(R8)
+         LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+         EJECT
+*        ENTRY: R3 -> 4-BYTE FIELD FOR CPU MODEL (EBCDIC DIGITS)
+GETMDL   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R7,16(0,0)          R7 = CVT
+         LR    R8,R7
+         LA    R9,6
+         SR    R8,R9               R8 = CVT-6
+         LH    R5,0(,R8)           R5 = MODEL HALFWORD
+         LR    R4,R5
+         SRL   R4,12               DIGIT 1
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)         ADD X'F0' ZONE
+         STC   R4,0(,R3)
+         LR    R4,R5
+         SRL   R4,8                DIGIT 2
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,1(,R3)
+         LR    R4,R5
+         SRL   R4,4                DIGIT 3
+         SLL   R4,28
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,2(,R3)
+         LR    R4,R5
+         SLL   R4,28               DIGIT 4
+         SRL   R4,28
+         LA    R4,240(,R4)
+         STC   R4,3(,R3)
+         LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+         EJECT
+*        ENTRY: R3 -> 6-BYTE FIELD FOR REAL STORAGE SIZE, E.G.
+*               '16384K'
+GETMEM   STM   R14,R12,12(R13)
+         BALR  R12,0
+         USING *,R12
+         L     R2,16(0,0)          R2 = CVT
+         USING CVTMAP,R2
+         L     R7,CVTRLSTG         R7 = REAL STORAGE IN KILOBYTES
+         DROP  R2
+         MVC   0(6,R3),BLANKS
+         MVI   5(R3),C'K'
+         LA    R4,4                R4 = INDEX OF NEXT DIGIT
+         LA    R9,10
+LOOP     SR    R6,R6               R6:R7 = DIVIDEND
+         DR    R6,R9               R7 = QUOTIENT, R6 = REMAINDER
+         LA    R6,240(,R6)         ADD X'F0' ZONE
+         STC   R6,0(R4,R3)
+         LTR   R7,R7
+         BZ    MEMDONE
+         BCTR  R4,0
+         LTR   R4,R4
+         BNM   LOOP
+MEMDONE  LM    R14,R12,12(R13)
+         SR    R15,R15
+         BR    R14
+BLANKS   DC    CL8' '
+*
+         CVT   DSECT=YES
          MEND

@@ -1,0 +1,95 @@
+         MACRO
+         $SFE  &A,&HILITE=,&COLOR=
+         LCLA  &I,&N,&P,&NU,&MD,&IN,&V,&C
+         LCLC  &T0,&T1,&T2,&T3,&T,&AT,&H,&K,&X
+&N       SETA  N'&A
+&I       SETA  1
+.LOOP    AIF   (&I GT &N).DONE
+&X       SETC  '&A(&I)'
+         AIF   ('&X' EQ 'PROT').PROT
+         AIF   ('&X' EQ 'UNPROT').UNPR
+         AIF   ('&X' EQ 'NUM').NUM
+         AIF   ('&X' EQ 'ALPHA').ALPHA
+         AIF   ('&X' EQ 'MDT').MDT
+         AIF   ('&X' EQ 'NOMDT').NOMDT
+         AIF   ('&X' EQ 'HI').HI
+         AIF   ('&X' EQ 'NONDISP').ND
+         AIF   ('&X' EQ 'SKIP').SKIP
+         MNOTE 8,'$SFE: UNKNOWN ATTRIBUTE &X'
+         AGO   .NEXT
+.PROT    ANOP
+&P       SETA  1
+         AGO   .NEXT
+.UNPR    ANOP
+&P       SETA  0
+         AGO   .NEXT
+.NUM     ANOP
+&NU      SETA  1
+         AGO   .NEXT
+.ALPHA   ANOP
+&NU      SETA  0
+         AGO   .NEXT
+.MDT     ANOP
+&MD      SETA  1
+         AGO   .NEXT
+.NOMDT   ANOP
+&MD      SETA  0
+         AGO   .NEXT
+.HI      ANOP
+&IN      SETA  2
+         AGO   .NEXT
+.ND      ANOP
+&IN      SETA  3
+         AGO   .NEXT
+.SKIP    ANOP
+&P       SETA  1
+&NU      SETA  1
+.NEXT    ANOP
+&I       SETA  &I+1
+         AGO   .LOOP
+.DONE    ANOP
+&V       SETA  &P*32+&NU*16+&IN*4+&MD
+&T0      SETC  '40C1C2C3C4C5C6C7C8C94A4B4C4D4E4F'
+&T1      SETC  '50D1D2D3D4D5D6D7D8D95A5B5C5D5E5F'
+&T2      SETC  '6061E2E3E4E5E6E7E8E96A6B6C6D6E6F'
+&T3      SETC  'F0F1F2F3F4F5F6F7F8F97A7B7C7D7E7F'
+&T       SETC  '&T0&T1&T2&T3'
+&AT      SETC  '&T'(&V*2+1,2)
+&C       SETA  1
+         AIF   ('&HILITE' EQ '').NOH
+&C       SETA  &C+1
+&H       SETC  '41F0'
+         AIF   ('&HILITE' EQ 'NORMAL').NOH
+&H       SETC  '41F1'
+         AIF   ('&HILITE' EQ 'BLINK').NOH
+&H       SETC  '41F2'
+         AIF   ('&HILITE' EQ 'REVERSE').NOH
+         AIF   ('&HILITE' EQ 'REV').NOH
+&H       SETC  '41F4'
+         AIF   ('&HILITE' EQ 'UNDERSCORE').NOH
+         AIF   ('&HILITE' EQ 'UNDER').NOH
+         MNOTE 8,'$SFE: BAD HILITE &HILITE'
+.NOH     ANOP
+         AIF   ('&COLOR' EQ '').NOC
+&C       SETA  &C+1
+&K       SETC  '42F0'
+         AIF   ('&COLOR' EQ 'DEFAULT').NOC
+&K       SETC  '42F1'
+         AIF   ('&COLOR' EQ 'BLUE').NOC
+&K       SETC  '42F2'
+         AIF   ('&COLOR' EQ 'RED').NOC
+&K       SETC  '42F3'
+         AIF   ('&COLOR' EQ 'PINK').NOC
+&K       SETC  '42F4'
+         AIF   ('&COLOR' EQ 'GREEN').NOC
+&K       SETC  '42F5'
+         AIF   ('&COLOR' EQ 'TURQ').NOC
+         AIF   ('&COLOR' EQ 'TURQUOISE').NOC
+&K       SETC  '42F6'
+         AIF   ('&COLOR' EQ 'YELLOW').NOC
+&K       SETC  '42F7'
+         AIF   ('&COLOR' EQ 'WHITE').NOC
+         MNOTE 8,'$SFE: BAD COLOR &COLOR'
+.NOC     ANOP
+         DC    X'29',AL1(&C),X'C0&AT&H&K'
+         MEND

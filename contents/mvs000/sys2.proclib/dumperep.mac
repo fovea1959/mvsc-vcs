@@ -1,0 +1,10 @@
+//DUMPEREP PROC SOUT=R,P=SU
+//* ***************************************************************** *
+//* DUMP ENVIRONMENTAL ERROR RECORDER DATASET                         *
+//* ***************************************************************** *
+//EREP     EXEC PGM=IFCEREP1,REGION=2048K,
+//  PARM='PRINT=&P,ZERO=N,ACC=N,LINECT=60,TABSIZE=512K'
+//SERLOG   DD  DISP=SHR,DSN=SYS1.LOGREC
+//TOURIST  DD  SYSOUT=&SOUT,DCB=(RECFM=FBA,LRECL=133,BLKSIZE=133)
+//EREPPT   DD  SYSOUT=&SOUT,DCB=(RECFM=FBA,LRECL=133,BLKSIZE=133)
+//SYSIN    DD  DUMMY

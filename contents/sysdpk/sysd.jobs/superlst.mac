@@ -1,0 +1,10 @@
+//SUPERLST JOB (WEGSCD),SUPERLST,CLASS=A,MSGCLASS=X
+//*------------------------------------------------------------------*
+//MVSCUS   EXEC PGM=SUPERLST,PARM=''
+//SYSPRINT  DD SYSOUT=*
+//VOL001    DD VOL=SER=MVSCUS,UNIT=SYSALLDA,DISP=OLD
+//VOL002    DD VOL=SER=SYSDPK,UNIT=SYSALLDA,DISP=OLD
+//*------------------------------------------------------------------*
+//SYSDPK   EXEC PGM=SUPERLST,PARM=''
+//SYSPRINT  DD SYSOUT=*
+//VOL001    DD VOL=SER=SYSDPK,UNIT=SYSALLDA,DISP=OLD

@@ -1,0 +1,66 @@
+//AWKTEST  JOB 01,'TEST AWK',CLASS=A,MSGCLASS=X,MSGLEVEL=(1,1),
+//             NOTIFY=&SYSUID,REGION=2048K
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='1'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//SYSIN     DD *
+apple banana cherry
+fee fie foe fum
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='"/f/"'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//SYSIN     DD *
+apple banana cherry
+fee fie foe fum
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='"{ print $2 }"'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//SYSIN     DD *
+apple banana cherry
+fee fie foe fum
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='-f dd:prog'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//PROG      DD *
+{ print $2 }
+/*
+//SYSIN     DD *
+apple banana cherry
+fee fie foe fum
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='-f dd:prog'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//PROG      DD *
+BEGIN { print 1+2 }
+END   { print NR }
+//SYSIN     DD *
+1
+2
+3
+4
+5
+/*
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
+//        EXEC PGM=AWK,REGION=6144K,PARM='-f dd:prog'
+//STEPLIB   DD DISP=SHR,DSN=SYSD.LINKLIB
+//PROG      DD *
+BEGIN { "date" × getline x }
+BEGIN { "date" × "cat" }
+//SYSIN     DD DUMMY
+//SYSPRINT  DD SYSOUT=*
+//SYSTERM   DD SYSOUT=*
+//*------------------------------------------------------------------*
