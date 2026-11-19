@@ -1,0 +1,25 @@
+LCL400   LBUILD SUBAREA=2
+CUU400   LOCAL TERM=3277,CUADDR=400,ISTATUS=ACTIVE,                    +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU401   LOCAL TERM=3277,CUADDR=401,ISTATUS=ACTIVE,                    +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU402   LOCAL TERM=3277,CUADDR=402,ISTATUS=ACTIVE,                    +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU403   LOCAL TERM=3277,CUADDR=403,ISTATUS=INACTIVE,                  +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU404   LOCAL TERM=3277,CUADDR=404,ISTATUS=ACTIVE,                    +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU405   LOCAL TERM=3277,CUADDR=405,ISTATUS=ACTIVE,                    +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU406   LOCAL TERM=3277,CUADDR=406,ISTATUS=INACTIVE,                  +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)
+CUU407   LOCAL TERM=3277,CUADDR=407,ISTATUS=INACTIVE,                  +
+               LOGTAB=LOGTAB01,LOGAPPL=NETSOL,                         +
+               FEATUR2=(MODEL2,PFK)

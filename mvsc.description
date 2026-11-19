@@ -1,5 +1,7 @@
 mvsres:sys1.proclib
 mvsres:sys1.parmlib
+mvs000:sys1.vtamlst
+mvs000:sys1.vtamsrc
 mvs000:sys2.proclib
 mvs000:sys2.maclib
 wegscd:wegscd.bottles
