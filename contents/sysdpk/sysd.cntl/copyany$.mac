@@ -1,0 +1,23 @@
+//WEGSCDCA JOB  (HERC01),
+//             'Build COPYANY',
+//             CLASS=A,
+//             MSGCLASS=X,COND=(4,LT),
+//             REGION=4M,NOTIFY=&SYSUID,
+//             MSGLEVEL=(1,1)
+//*--------------------------------------------------------------------
+//ASMFCL  EXEC ASMFCL,PARM.ASM='OBJECT,NODECK,LIST,XREF'
+//*            MAC='SYS1.MACLIB',
+//*            MAC1='SYS1.AMODGEN',
+//*            PARM.LKED='XREF,LET,LIST'
+//*SM.SYSIN DD DSN=CBT429.FILE314(COPYANY),DISP=SHR
+//ASM.SYSIN DD DSN=SYSD.ASM(COPYANY),DISP=SHR
+//LKED.SYSLMOD DD DISP=SHR,DSN=SYSD.LINKLIB(COPYANY)
+//LKED.SYSIN DD *
+  NAME COPYANY(R)
+//*----------------------------------------------------------
+//TEST      EXEC PGM=COPYANY
+//INFILE   DD *
+A
+B
+C
+//OUTFILE  DD SYSOUT=*,DCB=(RECFM=FB,LRECL=137,BLKSIZE=13700)

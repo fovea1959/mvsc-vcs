@@ -20,4 +20,5 @@ wegscd:wegscd.wsmf.src
 sysdpk:sysd.asm
 sysdpk:sysd.cntl
 sysdpk:sysd.jobs
+sysdpk:sysd.proclib
 sysdpk:sysd.sed.jcl
